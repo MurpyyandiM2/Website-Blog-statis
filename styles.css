@@ -1,11 +1,10 @@
 /* ========================================
    MURPYYANDI. - PORTFOLIO STYLES
-   Professional Tech Theme
+   Professional Tech Theme with PDF Viewer
    ======================================== */
 
-/* CSS Variables - Professional Theme */
+/* CSS Variables */
 :root {
-    /* Primary Colors - Deep Indigo/Teal */
     --primary: #4F46E5;
     --primary-light: #6366F1;
     --primary-dark: #3730A3;
@@ -14,7 +13,6 @@
     --gradient-start: #4F46E5;
     --gradient-end: #06B6D4;
     
-    /* Dark Theme Colors */
     --bg-primary: #0F172A;
     --bg-secondary: #1E293B;
     --bg-card: #334155;
@@ -24,39 +22,33 @@
     --text-muted: #64748B;
     --border: #334155;
     
-    /* Status Colors */
     --success: #10B981;
     --warning: #F59E0B;
     --info: #3B82F6;
     --error: #EF4444;
     
-    /* Professional Typography */
     --font-heading: 'Poppins', sans-serif;
     --font-body: 'Plus Jakarta Sans', sans-serif;
     
-    /* Spacing */
     --section-padding: 100px;
     --container-max: 1200px;
     
-    /* Transitions */
     --transition-fast: 0.2s ease;
     --transition-normal: 0.3s ease;
     --transition-slow: 0.5s ease;
     
-    /* Shadows */
     --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.5);
     --shadow-glow: 0 0 30px rgba(79, 70, 229, 0.3);
     
-    /* Border Radius */
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 20px;
     --radius-xl: 30px;
 }
 
-/* Light Theme Override */
+/* Light Theme */
 body.light-theme {
     --bg-primary: #F8FAFC;
     --bg-secondary: #F1F5F9;
@@ -533,7 +525,6 @@ body.light-theme .navbar {
     to { transform: rotate(0deg); }
 }
 
-/* Code decoration */
 .code-decoration {
     position: absolute;
     font-family: 'Fira Code', monospace;
@@ -543,22 +534,10 @@ body.light-theme .navbar {
     pointer-events: none;
 }
 
-.code-decoration-1 {
-    top: 10%;
-    left: 5%;
-}
+.code-decoration-1 { top: 10%; left: 5%; }
+.code-decoration-2 { bottom: 20%; right: 10%; }
+.code-decoration-3 { top: 30%; right: 5%; }
 
-.code-decoration-2 {
-    bottom: 20%;
-    right: 10%;
-}
-
-.code-decoration-3 {
-    top: 30%;
-    right: 5%;
-}
-
-/* Scroll Indicator */
 .scroll-indicator {
     position: absolute;
     bottom: 40px;
@@ -807,7 +786,6 @@ section {
     font-family: var(--font-body);
 }
 
-/* Timeline */
 .timeline {
     position: relative;
 }
@@ -862,7 +840,6 @@ section {
     font-family: var(--font-body);
 }
 
-/* Skills with Progress Bars */
 .skill-category {
     margin-bottom: 24px;
 }
@@ -933,7 +910,6 @@ section {
     100% { transform: translateX(100%); }
 }
 
-/* Skill Tags */
 .skill-tags {
     display: flex;
     flex-wrap: wrap;
@@ -1046,7 +1022,6 @@ section {
     color: white;
 }
 
-/* Certificate Modal */
 .certificate-modal .certificate-content {
     max-width: 900px;
 }
@@ -1441,10 +1416,6 @@ section {
     font-family: var(--font-body);
 }
 
-.footer-bottom i {
-    color: var(--error);
-}
-
 /* ========================================
    NOTIFICATION
    ======================================== */
@@ -1555,6 +1526,158 @@ section {
 
 .modal-body {
     padding: 24px;
+}
+
+/* ========================================
+   PDF VIEWER STYLES - FITUR BARU
+   ======================================== */
+.pdf-viewer-modal .pdf-viewer-content {
+    max-width: 95vw;
+    width: 900px;
+    max-height: 95vh;
+}
+
+.pdf-viewer-body {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    height: calc(95vh - 80px);
+}
+
+.pdf-container {
+    flex: 1;
+    overflow: auto;
+    background: var(--bg-secondary);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 20px;
+    position: relative;
+}
+
+#pdf-canvas {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    background: white;
+    max-width: 100%;
+    display: none;
+}
+
+.pdf-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+.pdf-loading i {
+    font-size: 3rem;
+    color: var(--primary);
+}
+
+.pdf-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 24px;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
+.pdf-controls button {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.pdf-controls button:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+#page-info {
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    min-width: 120px;
+    text-align: center;
+}
+
+.zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: 24px;
+    padding-left: 24px;
+    border-left: 1px solid var(--border);
+}
+
+#zoom-level {
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    min-width: 50px;
+    text-align: center;
+}
+
+.pdf-viewer-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.pdf-viewer-actions .btn-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.pdf-viewer-actions .btn-icon:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+/* File link previewable */
+.file-link.previewable {
+    cursor: pointer;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #FCA5A5;
+}
+
+.file-link.previewable:hover {
+    background: linear-gradient(135deg, #EF4444, #DC2626);
+    color: white;
+    border-color: transparent;
+}
+
+.file-link.previewable i {
+    color: inherit;
 }
 
 /* ========================================
@@ -1754,38 +1877,6 @@ section {
     color: inherit;
 }
 
-.complexity-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 20px 0;
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-}
-
-.complexity-table th,
-.complexity-table td {
-    padding: 14px 18px;
-    text-align: left;
-    border-bottom: 1px solid var(--border);
-}
-
-.complexity-table th {
-    background: linear-gradient(135deg, var(--primary), var(--primary-light));
-    font-weight: 600;
-    color: white;
-    font-family: var(--font-heading);
-}
-
-.complexity-table td {
-    color: var(--text-secondary);
-    background: var(--bg-secondary);
-    font-family: var(--font-body);
-}
-
-.complexity-table tr:last-child td {
-    border-bottom: none;
-}
-
 .status-badge {
     display: inline-flex;
     align-items: center;
@@ -1856,6 +1947,10 @@ section {
     
     .contact-grid {
         grid-template-columns: 1fr;
+    }
+    
+    .pdf-viewer-modal .pdf-viewer-content {
+        width: 95vw;
     }
 }
 
@@ -1957,6 +2052,28 @@ section {
     .back-to-top {
         bottom: 20px;
     }
+    
+    .pdf-viewer-modal .pdf-viewer-content {
+        width: 100vw;
+        height: 100vh;
+        max-width: 100vw;
+        max-height: 100vh;
+        border-radius: 0;
+    }
+    
+    .pdf-viewer-body {
+        height: calc(100vh - 80px);
+    }
+    
+    .zoom-controls {
+        margin-left: 12px;
+        padding-left: 12px;
+    }
+    
+    #page-info {
+        font-size: 0.8rem;
+        min-width: 100px;
+    }
 }
 
 @media (max-width: 480px) {
@@ -1985,8 +2102,7 @@ section {
         padding: 20px;
     }
     
-    .tasks-filter,
-    .projects-filter {
+    .tasks-filter {
         gap: 8px;
     }
     
@@ -2027,7 +2143,6 @@ section {
 .task-card:nth-child(5) { animation-delay: 0.2s; }
 .task-card:nth-child(6) { animation-delay: 0.25s; }
 
-/* Loading animation */
 .loading {
     display: inline-block;
     width: 20px;
@@ -2042,7 +2157,6 @@ section {
     to { transform: rotate(360deg); }
 }
 
-/* Empty state */
 .empty-state {
     text-align: center;
     padding: 60px 24px;

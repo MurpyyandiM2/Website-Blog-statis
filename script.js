@@ -1,9 +1,9 @@
 /**
  * MURPYYANDI. - PORTFOLIO JAVASCRIPT
- * Professional Portfolio with Admin Panel
+ * Professional Portfolio with Admin Panel & PDF Viewer
  */
 
-// Admin password (in production, this should be server-side)
+// Admin password
 const ADMIN_PASSWORD = 'Siapa123apa@@1#';
 
 // Data storage keys
@@ -15,7 +15,21 @@ const STORAGE_KEYS = {
     ADMIN_SESSION: 'admin_session'
 };
 
-// Initialize data storage with default values
+// PDF.js variables
+let pdfDoc = null;
+let pageNum = 1;
+let pageRendering = false;
+let pageNumPending = null;
+let scale = 1.5;
+let currentPdfData = null;
+let currentPdfName = null;
+
+// Initialize PDF.js
+if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+// Initialize storage
 function initStorage() {
     if (!localStorage.getItem(STORAGE_KEYS.TASKS)) {
         localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify([]));
@@ -29,10 +43,8 @@ function initStorage() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize storage
     initStorage();
     
-    // Initialize all functionality
     initNavigation();
     initScrollEffects();
     initTaskFilter();
@@ -45,10 +57,10 @@ document.addEventListener('DOMContentLoaded', function() {
     initCounterAnimation();
     initAdminPanel();
     
-    // Load data
     loadTasks();
     loadCertificates();
     updateStats();
+    initCVDownload();
 });
 
 /**
@@ -59,13 +71,11 @@ function initNavigation() {
     const navMenu = document.querySelector('.nav-menu');
     const navLinks = document.querySelectorAll('.nav-link');
     
-    // Toggle mobile menu
     hamburger.addEventListener('click', function() {
         hamburger.classList.toggle('active');
         navMenu.classList.toggle('active');
     });
     
-    // Close menu when clicking a link
     navLinks.forEach(link => {
         link.addEventListener('click', function() {
             hamburger.classList.remove('active');
@@ -75,7 +85,7 @@ function initNavigation() {
 }
 
 /**
- * Scroll effects - Navbar and active section highlighting
+ * Scroll effects
  */
 function initScrollEffects() {
     const navbar = document.querySelector('.navbar');
@@ -83,20 +93,15 @@ function initScrollEffects() {
     const navLinks = document.querySelectorAll('.nav-link');
     
     window.addEventListener('scroll', function() {
-        // Navbar background effect
         if (window.scrollY > 50) {
             navbar.style.boxShadow = '0 2px 20px rgba(0, 0, 0, 0.3)';
         } else {
             navbar.style.boxShadow = 'none';
         }
         
-        // Active section highlighting
         let current = '';
-        
         sections.forEach(section => {
             const sectionTop = section.offsetTop;
-            const sectionHeight = section.clientHeight;
-            
             if (scrollY >= sectionTop - 200) {
                 current = section.getAttribute('id');
             }
@@ -112,7 +117,7 @@ function initScrollEffects() {
 }
 
 /**
- * Typing Effect for Hero Title
+ * Typing Effect
  */
 function initTypingEffect() {
     const textElement = document.getElementById('typing-text');
@@ -127,12 +132,11 @@ function initTypingEffect() {
         }
     }
     
-    // Start typing after a short delay
     setTimeout(type, 500);
 }
 
 /**
- * Skill Progress Bars Animation
+ * Skill Progress Bars
  */
 function initSkillBars() {
     const skillBars = document.querySelectorAll('.skill-progress');
@@ -150,7 +154,7 @@ function initSkillBars() {
 }
 
 /**
- * Counter Animation for Stats
+ * Counter Animation
  */
 function initCounterAnimation() {
     const counters = document.querySelectorAll('.stat-number');
@@ -183,13 +187,12 @@ function animateCounter(element, target) {
 }
 
 /**
- * Particle Background Animation
+ * Particle Background
  */
 function initParticleBackground() {
     const canvas = document.getElementById('particles-canvas');
     const ctx = canvas.getContext('2d');
     
-    // Set canvas size
     function resizeCanvas() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
@@ -197,7 +200,6 @@ function initParticleBackground() {
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
     
-    // Particle class
     class Particle {
         constructor() {
             this.x = Math.random() * canvas.width;
@@ -212,7 +214,6 @@ function initParticleBackground() {
             this.x += this.speedX;
             this.y += this.speedY;
             
-            // Wrap around screen
             if (this.x > canvas.width) this.x = 0;
             if (this.x < 0) this.x = canvas.width;
             if (this.y > canvas.height) this.y = 0;
@@ -227,7 +228,6 @@ function initParticleBackground() {
         }
     }
     
-    // Create particles
     const particles = [];
     const particleCount = Math.min(50, Math.floor((canvas.width * canvas.height) / 20000));
     
@@ -235,7 +235,6 @@ function initParticleBackground() {
         particles.push(new Particle());
     }
     
-    // Draw connections between particles
     function drawConnections() {
         for (let i = 0; i < particles.length; i++) {
             for (let j = i + 1; j < particles.length; j++) {
@@ -255,7 +254,6 @@ function initParticleBackground() {
         }
     }
     
-    // Animation loop
     function animate() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
@@ -279,7 +277,6 @@ function initThemeToggle() {
     const icon = themeToggle.querySelector('i');
     const body = document.body;
     
-    // Check for saved theme preference
     const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
     if (savedTheme === 'light') {
         body.classList.add('light-theme');
@@ -303,7 +300,7 @@ function initThemeToggle() {
 }
 
 /**
- * Back to Top Button
+ * Back to Top
  */
 function initBackToTop() {
     const backToTop = document.getElementById('backToTop');
@@ -325,14 +322,13 @@ function initBackToTop() {
 }
 
 /**
- * Task filter functionality
+ * Task filter
  */
 function initTaskFilter() {
     const filterBtns = document.querySelectorAll('.tasks-filter .filter-btn');
     
     filterBtns.forEach(btn => {
         btn.addEventListener('click', function() {
-            // Update active button
             filterBtns.forEach(b => b.classList.remove('active'));
             this.classList.add('active');
             
@@ -358,7 +354,7 @@ function filterTasks(filter) {
 }
 
 /**
- * Smooth scroll for anchor links
+ * Smooth scroll
  */
 function initSmoothScroll() {
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
@@ -367,8 +363,7 @@ function initSmoothScroll() {
             const target = document.querySelector(this.getAttribute('href'));
             
             if (target) {
-                const offsetTop = target.offsetTop - 80; // Account for navbar
-                
+                const offsetTop = target.offsetTop - 80;
                 window.scrollTo({
                     top: offsetTop,
                     behavior: 'smooth'
@@ -379,7 +374,7 @@ function initSmoothScroll() {
 }
 
 /**
- * Show notification toast
+ * Notification
  */
 function showNotification(message, type = 'info') {
     const notification = document.getElementById('notification');
@@ -388,7 +383,6 @@ function showNotification(message, type = 'info') {
     
     notificationText.textContent = message;
     
-    // Update icon based on type
     icon.className = '';
     if (type === 'success') {
         icon.className = 'fas fa-check-circle';
@@ -403,14 +397,13 @@ function showNotification(message, type = 'info') {
     
     notification.classList.add('show');
     
-    // Hide after 3 seconds
     setTimeout(() => {
         notification.classList.remove('show');
     }, 3000);
 }
 
 /**
- * Contact Form Handler
+ * Contact Form
  */
 function handleContactSubmit(event) {
     event.preventDefault();
@@ -419,19 +412,167 @@ function handleContactSubmit(event) {
     const formData = new FormData(form);
     const name = formData.get('name');
     
-    // Show loading state
     const submitBtn = form.querySelector('button[type="submit"]');
     const originalText = submitBtn.innerHTML;
     submitBtn.innerHTML = '<span class="loading"></span> Mengirim...';
     submitBtn.disabled = true;
     
-    // Simulate form submission
     setTimeout(() => {
         showNotification(`Terima kasih ${name}! Pesan Anda telah terkirim.`, 'success');
         form.reset();
         submitBtn.innerHTML = originalText;
         submitBtn.disabled = false;
     }, 2000);
+}
+
+/**
+ * PDF Viewer Functions
+ */
+async function openPdfViewer(pdfData, title, fileName) {
+    try {
+        currentPdfData = pdfData;
+        currentPdfName = fileName;
+        
+        const modal = document.getElementById('pdf-viewer-modal');
+        const modalTitle = document.getElementById('pdf-viewer-title');
+        const canvas = document.getElementById('pdf-canvas');
+        const loading = document.getElementById('pdf-loading');
+        
+        modalTitle.textContent = title || 'Laporan Tugas';
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        
+        canvas.style.display = 'none';
+        loading.style.display = 'flex';
+        
+        let base64Data;
+        if (pdfData.includes(',')) {
+            base64Data = pdfData.split(',')[1];
+        } else {
+            base64Data = pdfData;
+        }
+        
+        const raw = window.atob(base64Data);
+        const uint8Array = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) {
+            uint8Array[i] = raw.charCodeAt(i);
+        }
+        
+        const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
+        pdfDoc = await loadingTask.promise;
+        
+        loading.style.display = 'none';
+        canvas.style.display = 'block';
+        
+        pageNum = 1;
+        scale = 1.5;
+        updatePageInfo();
+        updateZoomLevel();
+        
+        renderPage(pageNum);
+        
+    } catch (error) {
+        console.error('Error loading PDF:', error);
+        showNotification('Gagal memuat PDF. Silakan download file.', 'error');
+        closePdfViewer();
+    }
+}
+
+function renderPage(num) {
+    pageRendering = true;
+    
+    pdfDoc.getPage(num).then(page => {
+        const canvas = document.getElementById('pdf-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        const viewport = page.getViewport({ scale: scale });
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        
+        const renderContext = {
+            canvasContext: ctx,
+            viewport: viewport
+        };
+        
+        const renderTask = page.render(renderContext);
+        
+        renderTask.promise.then(() => {
+            pageRendering = false;
+            if (pageNumPending !== null) {
+                renderPage(pageNumPending);
+                pageNumPending = null;
+            }
+        });
+    });
+    
+    updatePageInfo();
+}
+
+function queueRenderPage(num) {
+    if (pageRendering) {
+        pageNumPending = num;
+    } else {
+        renderPage(num);
+    }
+}
+
+function prevPage() {
+    if (pageNum <= 1) return;
+    pageNum--;
+    queueRenderPage(pageNum);
+}
+
+function nextPage() {
+    if (pageNum >= pdfDoc.numPages) return;
+    pageNum++;
+    queueRenderPage(pageNum);
+}
+
+function zoomIn() {
+    scale += 0.25;
+    updateZoomLevel();
+    queueRenderPage(pageNum);
+}
+
+function zoomOut() {
+    if (scale <= 0.5) return;
+    scale -= 0.25;
+    updateZoomLevel();
+    queueRenderPage(pageNum);
+}
+
+function updatePageInfo() {
+    const pageInfo = document.getElementById('page-info');
+    if (pdfDoc) {
+        pageInfo.textContent = `Halaman ${pageNum} dari ${pdfDoc.numPages}`;
+    }
+}
+
+function updateZoomLevel() {
+    const zoomLevel = document.getElementById('zoom-level');
+    zoomLevel.textContent = `${Math.round(scale * 100)}%`;
+}
+
+function closePdfViewer() {
+    const modal = document.getElementById('pdf-viewer-modal');
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
+    
+    pdfDoc = null;
+    pageNum = 1;
+    currentPdfData = null;
+}
+
+function downloadCurrentPdf() {
+    if (currentPdfData && currentPdfName) {
+        const link = document.createElement('a');
+        link.href = currentPdfData;
+        link.download = currentPdfName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showNotification('PDF sedang didownload!', 'success');
+    }
 }
 
 /**
@@ -444,7 +585,6 @@ function initAdminPanel() {
         openAdminModal();
     });
     
-    // Check if admin is already logged in
     if (localStorage.getItem(STORAGE_KEYS.ADMIN_SESSION) === 'true') {
         showAdminDashboard();
     }
@@ -455,10 +595,9 @@ function openAdminModal() {
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
     
-    // Load admin lists
     loadAdminTasksList();
-    loadAdminCertsList();
-    updateCVStatus();
+    loadAdminCertsList();  // ✅ Sekarang sudah ada
+    updateCVStatus();      // ✅ Sekarang sudah ada
 }
 
 function closeAdminModal() {
@@ -491,22 +630,20 @@ function showAdminDashboard() {
     document.getElementById('admin-login').style.display = 'none';
     document.getElementById('admin-dashboard').style.display = 'block';
     loadAdminTasksList();
-    loadAdminCertsList();
-    updateCVStatus();
+    loadAdminCertsList();  // ✅ Sekarang sudah ada
+    updateCVStatus();      // ✅ Sekarang sudah ada
 }
 
 function switchAdminTab(tab) {
-    // Update tab buttons
     document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
     event.target.classList.add('active');
     
-    // Update tab content
     document.querySelectorAll('.admin-tab-content').forEach(c => c.style.display = 'none');
     document.getElementById('admin-' + tab).style.display = 'block';
 }
 
 /**
- * Task Management Functions
+ * Task Management
  */
 function loadTasks() {
     const tasksGrid = document.getElementById('tasksGrid');
@@ -583,7 +720,6 @@ function handleAddTask(event) {
         pptFile: null
     };
     
-    // Handle file uploads
     const promises = [];
     
     if (pdfFile) {
@@ -603,7 +739,6 @@ function handleAddTask(event) {
         tasks.push(task);
         localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
         
-        // Reset form and reload
         document.getElementById('addTaskForm').reset();
         loadTasks();
         loadAdminTasksList();
@@ -658,65 +793,9 @@ function loadAdminTasksList() {
     `).join('');
 }
 
-function showTaskDetail(taskId) {
-    const tasks = JSON.parse(localStorage.getItem(STORAGE_KEYS.TASKS)) || [];
-    const task = tasks.find(t => t.id === taskId);
-    
-    if (!task) {
-        showNotification('Tugas tidak ditemukan!', 'error');
-        return;
-    }
-    
-    const modal = document.getElementById('task-modal');
-    const modalTitle = document.getElementById('modal-title');
-    const modalBody = document.getElementById('modal-body');
-    
-    modalTitle.textContent = task.title;
-    
-    let fileLinksHtml = '';
-    if (task.pdfFile || task.pptFile) {
-        fileLinksHtml = '<h4>File Tugas</h4><div class="file-links">';
-        if (task.pdfFile) {
-            fileLinksHtml += `
-                <a href="${task.pdfFile.data}" download="${task.pdfFile.name}" class="file-link">
-                    <i class="fas fa-file-pdf"></i> Laporan PDF
-                </a>
-            `;
-        }
-        if (task.pptFile) {
-            fileLinksHtml += `
-                <a href="${task.pptFile.data}" download="${task.pptFile.name}" class="file-link">
-                    <i class="fas fa-file-powerpoint"></i> Presentasi PPT
-                </a>
-            `;
-        }
-        fileLinksHtml += '</div>';
-    }
-    
-    modalBody.innerHTML = `
-        <div class="task-detail-content">
-            <h4>Deskripsi Tugas</h4>
-            <p>${task.description}</p>
-            
-            <h4>Informasi</h4>
-            <ul>
-                <li><strong>Mata Kuliah:</strong> ${task.course}</li>
-                <li><strong>Kategori:</strong> ${task.category}</li>
-                <li><strong>Status:</strong> <span class="status-badge ${task.status}">${
-                    task.status === 'completed' ? 'Selesai' : 
-                    task.status === 'in-progress' ? 'Dalam Proses' : 'Menunggu'
-                }</span></li>
-                <li><strong>Tanggal:</strong> ${task.date}</li>
-            </ul>
-            
-            ${fileLinksHtml}
-        </div>
-    `;
-    
-    modal.classList.add('active');
-    document.body.style.overflow = 'hidden';
-}
-
+/**
+ * ⭐ FUNGSI BARU: Close Modal (Task Detail)
+ */
 function closeModal() {
     const modal = document.getElementById('task-modal');
     modal.classList.remove('active');
@@ -724,95 +803,17 @@ function closeModal() {
 }
 
 /**
- * Certificate Management Functions
+ * ⭐ FUNGSI BARU: Close Certificate Modal
  */
-function loadCertificates() {
-    const grid = document.getElementById('certificatesGrid');
-    const certificates = JSON.parse(localStorage.getItem(STORAGE_KEYS.CERTIFICATES)) || [];
-    
-    if (certificates.length === 0) {
-        grid.innerHTML = `
-            <div class="empty-state" style="grid-column: 1 / -1;">
-                <i class="fas fa-certificate"></i>
-                <h4>Belum Ada Sertifikat</h4>
-                <p>Sertifikat akan ditampilkan di sini setelah ditambahkan oleh admin.</p>
-            </div>
-        `;
-        return;
-    }
-    
-    grid.innerHTML = certificates.map(cert => createCertificateCard(cert)).join('');
+function closeCertificateModal() {
+    const modal = document.getElementById('certificate-modal');
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
 }
 
-function createCertificateCard(cert) {
-    return `
-        <div class="certificate-card" onclick="showCertificateDetail('${cert.id}')">
-            <div class="certificate-icon">
-                <i class="fas ${cert.icon}"></i>
-            </div>
-            <h3 class="certificate-title">${cert.title}</h3>
-            <p class="certificate-issuer">${cert.issuer}</p>
-            <span class="certificate-date">${cert.year}</span>
-            <button class="certificate-view-btn">
-                <i class="fas fa-eye"></i> Lihat Sertifikat
-            </button>
-        </div>
-    `;
-}
-
-function handleAddCertificate(event) {
-    event.preventDefault();
-    
-    const title = document.getElementById('certTitle').value;
-    const issuer = document.getElementById('certIssuer').value;
-    const year = document.getElementById('certYear').value;
-    const icon = document.getElementById('certIcon').value;
-    const file = document.getElementById('certFile').files[0];
-    
-    const certificate = {
-        id: 'cert_' + Date.now(),
-        title,
-        issuer,
-        year,
-        icon,
-        file: null
-    };
-    
-    if (file) {
-        readFileAsDataURL(file).then(data => {
-            certificate.file = { name: file.name, data: data, type: file.type };
-            saveCertificate(certificate);
-        });
-    } else {
-        saveCertificate(certificate);
-    }
-}
-
-function saveCertificate(certificate) {
-    const certificates = JSON.parse(localStorage.getItem(STORAGE_KEYS.CERTIFICATES)) || [];
-    certificates.push(certificate);
-    localStorage.setItem(STORAGE_KEYS.CERTIFICATES, JSON.stringify(certificates));
-    
-    document.getElementById('addCertificateForm').reset();
-    loadCertificates();
-    loadAdminCertsList();
-    updateStats();
-    showNotification('Sertifikat berhasil ditambahkan!', 'success');
-}
-
-function deleteCertificate(certId) {
-    if (!confirm('Apakah Anda yakin ingin menghapus sertifikat ini?')) return;
-    
-    const certificates = JSON.parse(localStorage.getItem(STORAGE_KEYS.CERTIFICATES)) || [];
-    const filtered = certificates.filter(c => c.id !== certId);
-    localStorage.setItem(STORAGE_KEYS.CERTIFICATES, JSON.stringify(filtered));
-    
-    loadCertificates();
-    loadAdminCertsList();
-    updateStats();
-    showNotification('Sertifikat berhasil dihapus!', 'success');
-}
-
+/**
+ * ⭐ FUNGSI BARU: Load Admin Certificates List
+ */
 function loadAdminCertsList() {
     const list = document.getElementById('adminCertsList');
     const certificates = JSON.parse(localStorage.getItem(STORAGE_KEYS.CERTIFICATES)) || [];
@@ -837,6 +838,103 @@ function loadAdminCertsList() {
     `).join('');
 }
 
+/**
+ * ⭐ FUNGSI BARU: Handle Add Certificate
+ */
+function handleAddCertificate(event) {
+    event.preventDefault();
+    
+    const title = document.getElementById('certTitle').value;
+    const issuer = document.getElementById('certIssuer').value;
+    const year = document.getElementById('certYear').value;
+    const icon = document.getElementById('certIcon').value;
+    const fileInput = document.getElementById('certFile');
+    
+    const certificate = {
+        id: 'cert_' + Date.now(),
+        title,
+        issuer,
+        year,
+        icon,
+        file: null
+    };
+    
+    const processCertificate = () => {
+        const certificates = JSON.parse(localStorage.getItem(STORAGE_KEYS.CERTIFICATES)) || [];
+        certificates.push(certificate);
+        localStorage.setItem(STORAGE_KEYS.CERTIFICATES, JSON.stringify(certificates));
+        
+        document.getElementById('addCertificateForm').reset();
+        loadCertificates();
+        loadAdminCertsList();
+        updateStats();
+        showNotification('Sertifikat berhasil ditambahkan!', 'success');
+    };
+    
+    if (fileInput.files[0]) {
+        const file = fileInput.files[0];
+        readFileAsDataURL(file).then(data => {
+            certificate.file = {
+                name: file.name,
+                type: file.type,
+                data: data
+            };
+            processCertificate();
+        });
+    } else {
+        processCertificate();
+    }
+}
+
+/**
+ * ⭐ FUNGSI BARU: Delete Certificate
+ */
+function deleteCertificate(certId) {
+    if (!confirm('Apakah Anda yakin ingin menghapus sertifikat ini?')) return;
+    
+    const certificates = JSON.parse(localStorage.getItem(STORAGE_KEYS.CERTIFICATES)) || [];
+    const filteredCerts = certificates.filter(c => c.id !== certId);
+    localStorage.setItem(STORAGE_KEYS.CERTIFICATES, JSON.stringify(filteredCerts));
+    
+    loadCertificates();
+    loadAdminCertsList();
+    updateStats();
+    showNotification('Sertifikat berhasil dihapus!', 'success');
+}
+
+/**
+ * ⭐ FUNGSI BARU: Load Certificates (Public View)
+ */
+function loadCertificates() {
+    const grid = document.getElementById('certificatesGrid');
+    const certificates = JSON.parse(localStorage.getItem(STORAGE_KEYS.CERTIFICATES)) || [];
+    
+    if (certificates.length === 0) {
+        grid.innerHTML = `
+            <div class="empty-state" style="grid-column: 1 / -1;">
+                <i class="fas fa-certificate"></i>
+                <h4>Belum Ada Sertifikat</h4>
+                <p>Sertifikat akan ditampilkan di sini setelah ditambahkan oleh admin.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    grid.innerHTML = certificates.map(cert => `
+        <div class="certificate-card" onclick="showCertificateDetail('${cert.id}')">
+            <div class="certificate-icon">
+                <i class="fas ${cert.icon || 'fa-certificate'}"></i>
+            </div>
+            <h3>${cert.title}</h3>
+            <p>${cert.issuer}</p>
+            <span class="certificate-year">${cert.year}</span>
+        </div>
+    `).join('');
+}
+
+/**
+ * ⭐ FUNGSI BARU: Show Certificate Detail
+ */
 function showCertificateDetail(certId) {
     const certificates = JSON.parse(localStorage.getItem(STORAGE_KEYS.CERTIFICATES)) || [];
     const cert = certificates.find(c => c.id === certId);
@@ -851,6 +949,11 @@ function showCertificateDetail(certId) {
     const modalBody = document.getElementById('cert-modal-body');
     
     modalTitle.textContent = cert.title;
+    
+    if (cert.file) {
+        window.tempCertData = cert.file.data;
+        window.tempCertName = cert.file.name;
+    }
     
     let filePreview = '';
     if (cert.file) {
@@ -882,9 +985,9 @@ function showCertificateDetail(certId) {
         </div>
         <div class="certificate-actions">
             ${cert.file ? `
-                <a href="${cert.file.data}" download="${cert.file.name}" class="btn btn-primary">
+                <button class="btn btn-primary" onclick="downloadFile(window.tempCertData, window.tempCertName)">
                     <i class="fas fa-download"></i> Download Sertifikat
-                </a>
+                </button>
             ` : ''}
         </div>
     `;
@@ -893,19 +996,38 @@ function showCertificateDetail(certId) {
     document.body.style.overflow = 'hidden';
 }
 
-function closeCertificateModal() {
-    const modal = document.getElementById('certificate-modal');
-    modal.classList.remove('active');
-    document.body.style.overflow = '';
+/**
+ * ⭐ FUNGSI BARU: Update CV Status
+ */
+function updateCVStatus() {
+    const cvStatus = document.getElementById('cvStatus');
+    const cv = JSON.parse(localStorage.getItem(STORAGE_KEYS.CV));
+    
+    if (cvStatus) {
+        if (cv && cv.data) {
+            cvStatus.innerHTML = `
+                <div class="alert alert-success" style="color: var(--success); margin-top: 1rem;">
+                    <i class="fas fa-check-circle"></i> CV sudah diupload: ${cv.name}
+                </div>
+            `;
+        } else {
+            cvStatus.innerHTML = `
+                <div class="alert alert-info" style="color: var(--text-muted); margin-top: 1rem;">
+                    <i class="fas fa-info-circle"></i> Belum ada CV yang diupload
+                </div>
+            `;
+        }
+    }
 }
 
 /**
- * CV Management Functions
+ * ⭐ FUNGSI BARU: Handle Upload CV
  */
 function handleUploadCV(event) {
     event.preventDefault();
     
-    const file = document.getElementById('cvFile').files[0];
+    const fileInput = document.getElementById('cvFile');
+    const file = fileInput.files[0];
     
     if (!file) {
         showNotification('Pilih file CV terlebih dahulu!', 'error');
@@ -913,43 +1035,119 @@ function handleUploadCV(event) {
     }
     
     readFileAsDataURL(file).then(data => {
-        const cvData = {
+        const cv = {
             name: file.name,
             data: data,
             uploadedAt: new Date().toISOString()
         };
-        localStorage.setItem(STORAGE_KEYS.CV, JSON.stringify(cvData));
         
-        document.getElementById('uploadCvForm').reset();
+        localStorage.setItem(STORAGE_KEYS.CV, JSON.stringify(cv));
         updateCVStatus();
-        initCVDownload();
+        fileInput.value = '';
         showNotification('CV berhasil diupload!', 'success');
     });
 }
 
-function updateCVStatus() {
-    const statusDiv = document.getElementById('cvStatus');
-    const cv = JSON.parse(localStorage.getItem(STORAGE_KEYS.CV));
+/**
+ * Task Detail
+ */
+function showTaskDetail(taskId) {
+    const tasks = JSON.parse(localStorage.getItem(STORAGE_KEYS.TASKS)) || [];
+    const task = tasks.find(t => t.id === taskId);
     
-    if (cv) {
-        statusDiv.innerHTML = `
-            <div style="padding: 16px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-sm);">
-                <i class="fas fa-check-circle" style="color: var(--success);"></i>
-                <span style="color: var(--success); margin-left: 8px;">CV sudah diupload: ${cv.name}</span>
-            </div>
-        `;
-    } else {
-        statusDiv.innerHTML = `
-            <div style="padding: 16px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: var(--radius-sm);">
-                <i class="fas fa-exclamation-triangle" style="color: var(--warning);"></i>
-                <span style="color: var(--warning); margin-left: 8px;">CV belum diupload</span>
-            </div>
-        `;
+    if (!task) {
+        showNotification('Tugas tidak ditemukan!', 'error');
+        return;
     }
+    
+    const modal = document.getElementById('task-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalBody = document.getElementById('modal-body');
+    
+    modalTitle.textContent = task.title;
+    
+    let fileLinksHtml = '';
+    if (task.pdfFile || task.pptFile) {
+        fileLinksHtml = '<h4>File Tugas</h4><div class="file-links">';
+        
+        if (task.pdfFile) {
+            window.tempPdfData = task.pdfFile.data;
+            window.tempPdfName = task.pdfFile.name;
+            window.tempPdfTitle = task.title;
+            
+            fileLinksHtml += `
+                <div class="file-link previewable" onclick="openPdfViewer(window.tempPdfData, window.tempPdfTitle, window.tempPdfName)">
+                    <i class="fas fa-eye"></i> Lihat Laporan PDF
+                </div>
+                <button class="file-link" onclick="downloadFile(window.tempPdfData, window.tempPdfName)" style="cursor: pointer; border: none; font-family: inherit; font-size: inherit;">
+                    <i class="fas fa-download"></i> Download PDF
+                </button>
+            `;
+        }
+        
+        if (task.pptFile) {
+            window.tempPptData = task.pptFile.data;
+            window.tempPptName = task.pptFile.name;
+            
+            fileLinksHtml += `
+                <button class="file-link" onclick="downloadFile(window.tempPptData, window.tempPptName)" style="cursor: pointer; border: none; font-family: inherit; font-size: inherit;">
+                    <i class="fas fa-file-powerpoint"></i> Download Presentasi PPT
+                </button>
+            `;
+        }
+        
+        fileLinksHtml += '</div>';
+    }
+    
+    modalBody.innerHTML = `
+        <div class="task-detail-content">
+            <h4>Deskripsi Tugas</h4>
+            <p>${task.description}</p>
+            
+            <h4>Informasi</h4>
+            <ul>
+                <li><strong>Mata Kuliah:</strong> ${task.course}</li>
+                <li><strong>Kategori:</strong> ${task.category}</li>
+                <li><strong>Status:</strong> <span class="status-badge ${task.status}">${
+                    task.status === 'completed' ? 'Selesai' : 
+                    task.status === 'in-progress' ? 'Dalam Proses' : 'Menunggu'
+                }</span></li>
+                <li><strong>Tanggal:</strong> ${task.date}</li>
+            </ul>
+            
+            ${fileLinksHtml}
+        </div>
+    `;
+    
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
 }
 
+/**
+ * Universal Download Function
+ */
+function downloadFile(dataUrl, fileName) {
+    if (!dataUrl || !fileName) {
+        showNotification('File tidak tersedia!', 'error');
+        return;
+    }
+    
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showNotification('File sedang didownload!', 'success');
+}
+
+/**
+ * CV Download
+ */
 function initCVDownload() {
     const downloadBtn = document.getElementById('downloadCVBtn');
+    
+    if (!downloadBtn) return;
     
     downloadBtn.addEventListener('click', function(e) {
         e.preventDefault();
@@ -957,13 +1155,7 @@ function initCVDownload() {
         const cv = JSON.parse(localStorage.getItem(STORAGE_KEYS.CV));
         
         if (cv && cv.data) {
-            const link = document.createElement('a');
-            link.href = cv.data;
-            link.download = cv.name || 'CV_Murpyyandi_Muslih.pdf';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            showNotification('CV sedang didownload!', 'success');
+            downloadFile(cv.data, cv.name || 'CV_Murpyyandi_Muslih.pdf');
         } else {
             showNotification('CV belum tersedia. Silakan upload CV melalui Admin Panel.', 'error');
         }
@@ -996,16 +1188,12 @@ window.addEventListener('click', function(e) {
     const taskModal = document.getElementById('task-modal');
     const certModal = document.getElementById('certificate-modal');
     const adminModal = document.getElementById('admin-modal');
+    const pdfModal = document.getElementById('pdf-viewer-modal');
     
-    if (e.target === taskModal) {
-        closeModal();
-    }
-    if (e.target === certModal) {
-        closeCertificateModal();
-    }
-    if (e.target === adminModal) {
-        closeAdminModal();
-    }
+    if (e.target === taskModal) closeModal();
+    if (e.target === certModal) closeCertificateModal();
+    if (e.target === adminModal) closeAdminModal();
+    if (e.target === pdfModal) closePdfViewer();
 });
 
 // Close modals with Escape key
@@ -1014,10 +1202,6 @@ document.addEventListener('keydown', function(e) {
         closeModal();
         closeCertificateModal();
         closeAdminModal();
+        closePdfViewer();
     }
-});
-
-// Initialize CV download on page load
-document.addEventListener('DOMContentLoaded', function() {
-    initCVDownload();
 });
