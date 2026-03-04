@@ -6,11 +6,19 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
+    <meta name="description" content="Portfolio Murpyyandi Muslih - Mahasiswa Teknik Informatika">
+    <meta name="author" content="Murpyyandi Muslih">
     <title>Murpyyandi Muslih - Portfolio</title>
-    <link rel="stylesheet" href="styles.css?v=2">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
@@ -285,7 +293,7 @@
                                 <div class="timeline-content">
                                     <span class="timeline-year">2026</span>
                                     <h4>HOTEL GRAN MAHAKAM</h4>
-                                    <p>Berkerja di industri perhotelan sebagai finance</p>
+                                    <p>Bekerja di industri perhotelan sebagai finance</p>
                                     <h4>HIKING</h4>
                                     <p>Telah mendaki beberapa gunung di indonesia seperti Gunung Lawu, Gede, Pangrango & Pangradinan</p>
                                     <h4>MOTORAN</h4>
@@ -434,11 +442,14 @@
                 </div>
                 <div class="footer-social">
                     <a href="https://github.com/MurpyyandiM2" target="_blank" class="social-link">
-                        <i class="fab fa-github"></i></a>
+                        <i class="fab fa-github"></i>
+                    </a>
                     <a href="https://www.linkedin.com/in/murpyyandi-muslih-76a2a4370" target="_blank" class="social-link">
-                        <i class="fab fa-linkedin-in"></i></a>
+                        <i class="fab fa-linkedin-in"></i>
+                    </a>
                     <a href="https://www.instagram.com/b28xj28osn0" target="_blank" class="social-link">
-                        <i class="fab fa-instagram"></i></a>
+                        <i class="fab fa-instagram"></i>
+                    </a>
                     <a href="mailto:murpyyandimuslih@gmail.com" class="social-link">
                         <i class="fas fa-envelope"></i>
                     </a>
@@ -682,16 +693,20 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
+    <!-- ============================================
+         FIREBASE SDK - COMPAT MODE (v10.7.1)
+         URUTAN PENTING: Load SEBELUM script.js
+    ============================================ -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     
-    <!-- PDF.js -->
+    <!-- PDF.js untuk preview PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     
-    <!-- App Script -->
-    <script src="firebase-config.js"></script>
-    <script src="script.js"></script>
+    <!-- Custom Scripts (URUTAN PENTING!) -->
+    <script src="firebase-config.js"></script>  <!-- Load config DULUAN -->
+    <script src="script.js"></script>           <!-- Load main script KEMUDIAN -->
 </body>
 </html>
