@@ -8,7 +8,6 @@
     <meta http-equiv="Expires" content="0">
     <title>Murpyyandi Muslih - Portfolio</title>
     <link rel="stylesheet" href="styles.css?v=2">
-    <!-- Professional Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -17,6 +16,12 @@
 <body>
     <!-- Particle Background -->
     <canvas id="particles-canvas"></canvas>
+
+    <!-- Sync Status Indicator -->
+    <div id="syncStatus" class="sync-status">
+        <i class="fas fa-wifi"></i>
+        <span>Online</span>
+    </div>
 
     <!-- Theme Toggle -->
     <div class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
@@ -430,9 +435,9 @@
                 <div class="footer-social">
                     <a href="https://github.com/MurpyyandiM2" target="_blank" class="social-link">
                         <i class="fab fa-github"></i></a>
-                    <a href="https://www.linkedin.com/in/murpyyandi-muslih-76a2a4370?utm_source=share_via&utm_content=profile&utm_medium=member_android" target="_blank" class="social-link">
+                    <a href="https://www.linkedin.com/in/murpyyandi-muslih-76a2a4370" target="_blank" class="social-link">
                         <i class="fab fa-linkedin-in"></i></a>
-                    <a href="https://www.instagram.com/b28xj28osn0?igsh=MTI1ZzV5ZGthNHJzcg==" target="_blank" class="social-link">
+                    <a href="https://www.instagram.com/b28xj28osn0" target="_blank" class="social-link">
                         <i class="fab fa-instagram"></i></a>
                     <a href="mailto:murpyyandimuslih@gmail.com" class="social-link">
                         <i class="fas fa-envelope"></i>
@@ -481,7 +486,7 @@
         </div>
     </div>
 
-    <!-- PDF Viewer Modal - FITUR BARU -->
+    <!-- PDF Viewer Modal -->
     <div id="pdf-viewer-modal" class="modal pdf-viewer-modal">
         <div class="modal-content pdf-viewer-content">
             <div class="modal-header">
@@ -677,7 +682,16 @@
         </div>
     </div>
 
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    
+    <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <!-- App Script -->
+    <script src="firebase-config.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
