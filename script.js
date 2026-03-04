@@ -2,6 +2,8 @@
  * MURPYYANDI - PORTFOLIO JAVASCRIPT
  * Professional Portfolio dengan Firebase (Firestore + Storage)
  * Real-time sync, offline support, file storage
+ * 
+ * UPDATED: Fixed CORS & Upload Issues
  */
 
 // ============================================
@@ -13,12 +15,10 @@ const STORAGE_KEYS = {
     OFFLINE_QUEUE: 'offline_queue'
 };
 
-// Admin password (untuk panel admin) - GANTI dengan password Anda
-const ADMIN_PASSWORD = 'Siapa123apa@@1#1';
+// Admin password (untuk panel admin)
+const ADMIN_PASSWORD = 'Siapa123apa@@1#';
 
-// ============================================
-// PDF.JS VARIABLES
-// ============================================
+// PDF.js variables
 let pdfDoc = null;
 let pageNum = 1;
 let pageRendering = false;
@@ -27,9 +27,7 @@ let scale = 1.5;
 let currentPdfData = null;
 let currentPdfName = null;
 
-// ============================================
-// DATA CACHE LOKAL
-// ============================================
+// Data cache lokal untuk UI
 let appData = {
     tasks: [],
     certificates: [],
@@ -51,15 +49,34 @@ const FirebaseService = {
         } catch (error) {
             console.warn('⚠️ Offline persistence not enabled:', error);
         }
-        
+
         // Setup auth anonim untuk security rules
         try {
-            if (typeof auth !== 'undefined' && auth.signInAnonymously) {
+            if (typeof auth !== 'undefined') {
                 await auth.signInAnonymously();
                 console.log('✅ Signed in anonymously');
             }
         } catch (error) {
             console.log('ℹ️ Auth error (non-critical):', error.message);
+        }
+    },
+
+    // Test Storage Connection
+    testStorageConnection: async () => {
+        try {
+            console.log('🧪 Testing Storage connection...');
+            const testRef = storage.ref('test/connection.txt');
+            await testRef.putString('test-' + Date.now());
+            console.log('✅ Storage connection OK');
+            return true;
+        } catch (error) {
+            console.error('❌ Storage connection failed:', error);
+            if (error.code === 'storage/unauthorized') {
+                showNotification('Storage unauthorized. Periksa Storage Rules!', 'error');
+            } else if (error.code === 'storage/cors-error') {
+                showNotification('CORS error. Periksa CORS configuration!', 'error');
+            }
+            return false;
         }
     },
 
@@ -69,7 +86,7 @@ const FirebaseService = {
             console.error('❌ Firestore not initialized');
             return null;
         }
-        
+
         const unsub = db.collection(COLLECTIONS.TASKS)
             .orderBy('createdAt', 'desc')
             .onSnapshot((snapshot) => {
@@ -80,7 +97,7 @@ const FirebaseService = {
                 appData.tasks = tasks;
                 callback(tasks);
             }, (error) => {
-                console.error('❌ Tasks listener error:', error);
+                console.error('Tasks listener error:', error);
                 // Fallback ke cache lokal jika ada
                 const cached = localStorage.getItem('cached_tasks');
                 if (cached) {
@@ -98,7 +115,7 @@ const FirebaseService = {
             console.error('❌ Firestore not initialized');
             return null;
         }
-        
+
         const unsub = db.collection(COLLECTIONS.CERTIFICATES)
             .orderBy('year', 'desc')
             .onSnapshot((snapshot) => {
@@ -109,7 +126,7 @@ const FirebaseService = {
                 appData.certificates = certs;
                 callback(certs);
             }, (error) => {
-                console.error('❌ Certificates listener error:', error);
+                console.error('Certificates listener error:', error);
                 const cached = localStorage.getItem('cached_certificates');
                 if (cached) {
                     appData.certificates = JSON.parse(cached);
@@ -122,8 +139,6 @@ const FirebaseService = {
 
     // One-time fetch untuk CV
     fetchCV: async () => {
-        if (!db) return null;
-        
         try {
             const doc = await db.collection(COLLECTIONS.CV).doc('main').get();
             if (doc.exists) {
@@ -132,14 +147,13 @@ const FirebaseService = {
             }
             return null;
         } catch (error) {
-            console.error('❌ CV fetch error:', error);
+            console.error('CV fetch error:', error);
             const cached = localStorage.getItem('cached_cv');
             return cached ? JSON.parse(cached) : null;
         }
     },
 
-    // ========== CRUD OPERATIONS ==========
-    
+    // CRUD Operations
     // Add Task
     addTask: async (taskData, files) => {
         try {
@@ -149,13 +163,18 @@ const FirebaseService = {
             let pdfFile = null;
             let pptFile = null;
             
-            if (files?.pdf) {
+            if (files.pdf) {
+                console.log('Uploading PDF:', files.pdf.name);
                 pdfFile = await FirebaseHelper.uploadFile(files.pdf, 'tasks/pdfs');
-            }
-            if (files?.ppt) {
-                pptFile = await FirebaseHelper.uploadFile(files.ppt, 'tasks/ppts');
+                console.log('PDF uploaded:', pdfFile.url);
             }
             
+            if (files.ppt) {
+                console.log('Uploading PPT:', files.ppt.name);
+                pptFile = await FirebaseHelper.uploadFile(files.ppt, 'tasks/ppts');
+                console.log('PPT uploaded:', pptFile.url);
+            }
+
             // Save ke Firestore
             const taskRef = await db.collection(COLLECTIONS.TASKS).add({
                 ...taskData,
@@ -170,7 +189,17 @@ const FirebaseService = {
             
         } catch (error) {
             console.error('❌ Add task error:', error);
-            showNotification('❌ Gagal: ' + error.message, 'error');
+            let errorMsg = 'Gagal menambahkan tugas';
+            
+            if (error.code === 'storage/unauthorized') {
+                errorMsg = 'Storage unauthorized. Periksa Storage Rules!';
+            } else if (error.message.includes('CORS')) {
+                errorMsg = 'CORS error. Periksa CORS configuration!';
+            } else {
+                errorMsg += ': ' + error.message;
+            }
+            
+            showNotification(errorMsg, 'error');
             throw error;
         }
     },
@@ -182,9 +211,10 @@ const FirebaseService = {
                 ...updates,
                 updatedAt: FirebaseHelper.timestamp()
             };
-            
+
             // Handle file uploads jika ada file baru
-            if (files?.pdf) {
+            if (files && files.pdf) {
+                // Delete old file if exists
                 const oldTask = appData.tasks.find(t => t.id === taskId);
                 if (oldTask?.pdfFile?.path) {
                     await FirebaseHelper.deleteFile(oldTask.pdfFile.path);
@@ -192,47 +222,39 @@ const FirebaseService = {
                 updateData.pdfFile = await FirebaseHelper.uploadFile(files.pdf, 'tasks/pdfs');
             }
             
-            if (files?.ppt) {
+            if (files && files.ppt) {
                 const oldTask = appData.tasks.find(t => t.id === taskId);
                 if (oldTask?.pptFile?.path) {
                     await FirebaseHelper.deleteFile(oldTask.pptFile.path);
                 }
                 updateData.pptFile = await FirebaseHelper.uploadFile(files.ppt, 'tasks/ppts');
             }
-            
+
             await db.collection(COLLECTIONS.TASKS).doc(taskId).update(updateData);
             showNotification('✅ Tugas berhasil diupdate!', 'success');
-            
         } catch (error) {
             console.error('❌ Update task error:', error);
-            showNotification('❌ Gagal: ' + error.message, 'error');
+            showNotification('Gagal mengupdate tugas: ' + error.message, 'error');
             throw error;
         }
     },
 
     // Delete Task
     deleteTask: async (taskId) => {
-        if (!confirm('⚠️ Apakah Anda yakin ingin menghapus tugas ini?')) {
-            return false;
-        }
+        if (!confirm('Apakah Anda yakin ingin menghapus tugas ini?')) return false;
         
         try {
             // Delete associated files first
             const task = appData.tasks.find(t => t.id === taskId);
-            if (task?.pdfFile?.path) {
-                await FirebaseHelper.deleteFile(task.pdfFile.path);
-            }
-            if (task?.pptFile?.path) {
-                await FirebaseHelper.deleteFile(task.pptFile.path);
-            }
+            if (task?.pdfFile?.path) await FirebaseHelper.deleteFile(task.pdfFile.path);
+            if (task?.pptFile?.path) await FirebaseHelper.deleteFile(task.pptFile.path);
             
             await db.collection(COLLECTIONS.TASKS).doc(taskId).delete();
             showNotification('✅ Tugas berhasil dihapus!', 'success');
             return true;
-            
         } catch (error) {
             console.error('❌ Delete task error:', error);
-            showNotification('❌ Gagal: ' + error.message, 'error');
+            showNotification('Gagal menghapus tugas: ' + error.message, 'error');
             throw error;
         }
     },
@@ -244,12 +266,10 @@ const FirebaseService = {
             
             let certFile = null;
             if (file) {
-                const folder = file.type?.startsWith('image/') 
-                    ? 'certificates/images' 
-                    : 'certificates/docs';
+                const folder = file.type.startsWith('image/') ? 'certificates/images' : 'certificates/docs';
                 certFile = await FirebaseHelper.uploadFile(file, folder);
             }
-            
+
             const certRef = await db.collection(COLLECTIONS.CERTIFICATES).add({
                 ...certData,
                 file: certFile,
@@ -259,33 +279,27 @@ const FirebaseService = {
             
             showNotification('✅ Sertifikat berhasil ditambahkan!', 'success');
             return certRef.id;
-            
         } catch (error) {
             console.error('❌ Add certificate error:', error);
-            showNotification('❌ Gagal: ' + error.message, 'error');
+            showNotification('Gagal menambahkan sertifikat: ' + error.message, 'error');
             throw error;
         }
     },
 
     // Delete Certificate
     deleteCertificate: async (certId) => {
-        if (!confirm('⚠️ Apakah Anda yakin ingin menghapus sertifikat ini?')) {
-            return false;
-        }
+        if (!confirm('Apakah Anda yakin ingin menghapus sertifikat ini?')) return false;
         
         try {
             const cert = appData.certificates.find(c => c.id === certId);
-            if (cert?.file?.path) {
-                await FirebaseHelper.deleteFile(cert.file.path);
-            }
+            if (cert?.file?.path) await FirebaseHelper.deleteFile(cert.file.path);
             
             await db.collection(COLLECTIONS.CERTIFICATES).doc(certId).delete();
             showNotification('✅ Sertifikat berhasil dihapus!', 'success');
             return true;
-            
         } catch (error) {
             console.error('❌ Delete certificate error:', error);
-            showNotification('❌ Gagal: ' + error.message, 'error');
+            showNotification('Gagal menghapus sertifikat: ' + error.message, 'error');
             throw error;
         }
     },
@@ -312,10 +326,9 @@ const FirebaseService = {
             appData.cv = { file: cvFile, name: file.name };
             showNotification('✅ CV berhasil diupload!', 'success');
             return true;
-            
         } catch (error) {
             console.error('❌ Upload CV error:', error);
-            showNotification('❌ Gagal: ' + error.message, 'error');
+            showNotification('Gagal mengupload CV: ' + error.message, 'error');
             throw error;
         }
     },
@@ -338,28 +351,30 @@ const FirebaseService = {
 // ============================================
 document.addEventListener('DOMContentLoaded', async function() {
     
-    // Init PDF.js worker
+    // Init PDF.js
     if (typeof pdfjsLib !== 'undefined') {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 
-            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     }
-    
+
     // Init Firebase
     try {
         await FirebaseService.init();
         showNotification('🔗 Terhubung ke database', 'info');
     } catch (error) {
-        console.error('❌ Firebase init error:', error);
+        console.error('Firebase init error:', error);
         showNotification('⚠️ Mode offline - menggunakan data tersimpan', 'warning');
     }
-    
+
+    // Test Storage Connection
+    await FirebaseService.testStorageConnection();
+
     // Setup real-time listeners
     setupRealtimeListeners();
-    
+
     // Load CV
     await FirebaseService.fetchCV();
-    
-    // Init UI Components
+
+    // Init UI
     initNavigation();
     initScrollEffects();
     initTaskFilter();
@@ -372,28 +387,20 @@ document.addEventListener('DOMContentLoaded', async function() {
     initCounterAnimation();
     initAdminPanel();
     initCVDownload();
-    
-    // Cache data periodically (setiap 30 detik)
-    setInterval(() => FirebaseService.cacheData(), 30000);
-    
+
+    // Cache data periodically
+    setInterval(() => FirebaseService.cacheData(), 30000); // Setiap 30 detik
+
     // Update connection status
     window.addEventListener('online', () => {
         showNotification('🟢 Koneksi online', 'success');
-        updateSyncStatus();
     });
     
     window.addEventListener('offline', () => {
         showNotification('🟡 Mode offline - perubahan akan tersimpan nanti', 'warning');
-        updateSyncStatus();
     });
-    
-    // Initial sync status
-    updateSyncStatus();
 });
 
-// ============================================
-// SETUP REAL-TIME LISTENERS
-// ============================================
 function setupRealtimeListeners() {
     // Tasks listener
     FirebaseService.subscribeTasks((tasks) => {
@@ -401,7 +408,7 @@ function setupRealtimeListeners() {
         updateStats();
         FirebaseService.cacheData();
     });
-    
+
     // Certificates listener
     FirebaseService.subscribeCertificates((certs) => {
         renderCertificates(certs);
@@ -419,10 +426,10 @@ function renderTasks(tasks) {
     
     if (!tasks || tasks.length === 0) {
         tasksGrid.innerHTML = `
-            <div class="empty-state" style="grid-column: 1 / -1; text-align: center; padding: 3rem;">
-                <i class="fas fa-tasks" style="font-size: 3rem; color: var(--text-muted); margin-bottom: 1rem;"></i>
+            <div class="empty-state" style="grid-column: 1 / -1;">
+                <i class="fas fa-tasks"></i>
                 <h4>Belum Ada Tugas</h4>
-                <p style="color: var(--text-muted);">Tugas akan ditampilkan di sini setelah ditambahkan oleh admin.</p>
+                <p>Tugas akan ditampilkan di sini setelah ditambahkan oleh admin.</p>
             </div>
         `;
         return;
@@ -437,23 +444,23 @@ function renderCertificates(certificates) {
     
     if (!certificates || certificates.length === 0) {
         grid.innerHTML = `
-            <div class="empty-state" style="grid-column: 1 / -1; text-align: center; padding: 3rem;">
-                <i class="fas fa-certificate" style="font-size: 3rem; color: var(--text-muted); margin-bottom: 1rem;"></i>
+            <div class="empty-state" style="grid-column: 1 / -1;">
+                <i class="fas fa-certificate"></i>
                 <h4>Belum Ada Sertifikat</h4>
-                <p style="color: var(--text-muted);">Sertifikat akan ditampilkan di sini setelah ditambahkan oleh admin.</p>
+                <p>Sertifikat akan ditampilkan di sini setelah ditambahkan oleh admin.</p>
             </div>
         `;
         return;
     }
     
     grid.innerHTML = certificates.map(cert => `
-        <div class="certificate-card" onclick="showCertificateDetail('${cert.id}')" style="cursor: pointer;">
+        <div class="certificate-card" onclick="showCertificateDetail('${cert.id}')">
             <div class="certificate-icon">
                 <i class="fas ${cert.icon || 'fa-certificate'}"></i>
             </div>
-            <h3>${cert.title || 'Untitled'}</h3>
-            <p>${cert.issuer || ''}</p>
-            <span class="certificate-year">${cert.year || '-'}</span>
+            <h3>${cert.title}</h3>
+            <p>${cert.issuer}</p>
+            <span class="certificate-year">${cert.year}</span>
         </div>
     `).join('');
 }
@@ -472,21 +479,23 @@ async function handleAddTask(event) {
     
     try {
         const taskData = {
-            title: document.getElementById('taskTitle').value.trim(),
-            course: document.getElementById('taskCourse').value.trim(),
+            title: document.getElementById('taskTitle').value,
+            course: document.getElementById('taskCourse').value,
             category: document.getElementById('taskCategory').value,
             status: document.getElementById('taskStatus').value,
-            description: document.getElementById('taskDescription').value.trim(),
+            description: document.getElementById('taskDescription').value,
             date: new Date().toLocaleDateString('id-ID', { 
-                day: 'numeric', month: 'short', year: 'numeric' 
+                day: 'numeric', 
+                month: 'short', 
+                year: 'numeric' 
             })
         };
-        
+
         const files = {
             pdf: document.getElementById('taskPdfFile').files[0] || null,
             ppt: document.getElementById('taskPptFile').files[0] || null
         };
-        
+
         await FirebaseService.addTask(taskData, files);
         
         // Reset form
@@ -497,7 +506,7 @@ async function handleAddTask(event) {
         console.error('❌ handleAddTask error:', error);
     } finally {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = originalBtnText;
+        submitBtn.innerHTML = '<i class="fas fa-plus"></i> Tambah Tugas';
     }
 }
 
@@ -512,14 +521,14 @@ async function handleAddCertificate(event) {
     
     try {
         const certData = {
-            title: document.getElementById('certTitle').value.trim(),
-            issuer: document.getElementById('certIssuer').value.trim(),
+            title: document.getElementById('certTitle').value,
+            issuer: document.getElementById('certIssuer').value,
             year: parseInt(document.getElementById('certYear').value),
             icon: document.getElementById('certIcon').value
         };
-        
+
         const file = document.getElementById('certFile').files[0] || null;
-        
+
         await FirebaseService.addCertificate(certData, file);
         
         // Reset form
@@ -530,7 +539,7 @@ async function handleAddCertificate(event) {
         console.error('❌ handleAddCertificate error:', error);
     } finally {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = originalBtnText;
+        submitBtn.innerHTML = '<i class="fas fa-plus"></i> Tambah Sertifikat';
     }
 }
 
@@ -555,7 +564,7 @@ async function handleUploadCV(event) {
             showNotification('⚠️ File harus berformat PDF!', 'error');
             return;
         }
-        
+
         await FirebaseService.uploadCV(file);
         updateCVStatus();
         document.getElementById('uploadCvForm').reset();
@@ -564,44 +573,7 @@ async function handleUploadCV(event) {
         console.error('❌ handleUploadCV error:', error);
     } finally {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = originalBtnText;
-    }
-}
-
-async function handleContactSubmit(event) {
-    event.preventDefault();
-    
-    const form = event.target;
-    const submitBtn = form.querySelector('button[type="submit"]');
-    const originalBtnText = submitBtn.innerHTML;
-    
-    const name = document.getElementById('name').value;
-    
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
-    
-    try {
-        // Simpan ke Firestore jika db tersedia
-        if (typeof db !== 'undefined') {
-            await db.collection(COLLECTIONS.CONTACTS).add({
-                name: name,
-                email: document.getElementById('email').value,
-                subject: document.getElementById('subject').value,
-                message: document.getElementById('message').value,
-                createdAt: FirebaseHelper.timestamp(),
-                status: 'unread'
-            });
-        }
-        
-        showNotification(`✅ Terima kasih ${name}! Pesan Anda telah terkirim.`, 'success');
-        form.reset();
-        
-    } catch (error) {
-        console.error('❌ Contact form error:', error);
-        showNotification('⚠️ Gagal mengirim pesan. Silakan coba lagi.', 'error');
-    } finally {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = originalBtnText;
+        submitBtn.innerHTML = '<i class="fas fa-upload"></i> Upload CV';
     }
 }
 
@@ -631,7 +603,7 @@ async function deleteCertificate(certId) {
 }
 
 // ============================================
-// UI HELPERS - CREATE CARDS
+// UI HELPERS
 // ============================================
 function createTaskCard(task) {
     const statusClass = task.status || 'pending';
@@ -647,18 +619,16 @@ function createTaskCard(task) {
         'pending': 'fa-hourglass-start'
     }[statusClass] || 'fa-hourglass-start';
     
-    // Format tanggal
+    // Format tanggal dari Firestore timestamp
     let dateStr = task.date;
-    if (task.createdAt?.toDate) {
+    if (task.createdAt && task.createdAt.toDate) {
         dateStr = task.createdAt.toDate().toLocaleDateString('id-ID', {
             day: 'numeric', month: 'short', year: 'numeric'
         });
     }
     
     return `
-        <article class="task-card ${statusClass}" 
-                 data-category="${task.category || 'other'}" 
-                 data-id="${task.id}">
+        <article class="task-card ${statusClass}" data-category="${task.category || 'other'}" data-id="${task.id}">
             <div class="task-header">
                 <span class="task-course">${task.course || '-'}</span>
                 <span class="task-date">${dateStr}</span>
@@ -677,9 +647,6 @@ function createTaskCard(task) {
     `;
 }
 
-// ============================================
-// ADMIN PANEL FUNCTIONS
-// ============================================
 function loadAdminTasksList() {
     const list = document.getElementById('adminTasksList');
     if (!list) return;
@@ -692,7 +659,7 @@ function loadAdminTasksList() {
     }
     
     list.innerHTML = tasks.map(task => {
-        const dateStr = task.createdAt?.toDate 
+        const dateStr = task.createdAt && task.createdAt.toDate
             ? task.createdAt.toDate().toLocaleDateString('id-ID')
             : task.date || '-';
         
@@ -742,13 +709,13 @@ function updateCVStatus() {
     const cvStatus = document.getElementById('cvStatus');
     if (!cvStatus) return;
     
-    if (appData.cv?.file) {
-        const uploadedAt = appData.cv.uploadedAt?.toDate
+    if (appData.cv && appData.cv.file) {
+        const uploadedAt = appData.cv.uploadedAt && appData.cv.uploadedAt.toDate
             ? appData.cv.uploadedAt.toDate().toLocaleString('id-ID')
             : 'Baru saja';
         
         cvStatus.innerHTML = `
-            <div class="alert alert-success" style="color: var(--success); margin-top: 1rem; padding: 1rem; background: rgba(16, 185, 129, 0.1); border-radius: var(--radius-md);">
+            <div class="alert alert-success" style="color: var(--success); margin-top: 1rem;">
                 <i class="fas fa-check-circle"></i> CV sudah diupload: ${appData.cv.name || appData.cv.file.name}
                 <br><small style="color: var(--text-muted);">Upload: ${uploadedAt}</small>
                 <br><small style="color: var(--text-muted);">Status: ${FirebaseHelper.isOnline() ? '🟢 Online' : '🟡 Offline'}</small>
@@ -756,7 +723,7 @@ function updateCVStatus() {
         `;
     } else {
         cvStatus.innerHTML = `
-            <div class="alert alert-info" style="color: var(--text-muted); margin-top: 1rem; padding: 1rem; background: rgba(59, 130, 246, 0.1); border-radius: var(--radius-md);">
+            <div class="alert alert-info" style="color: var(--text-muted); margin-top: 1rem;">
                 <i class="fas fa-info-circle"></i> Belum ada CV yang diupload
             </div>
         `;
@@ -768,37 +735,20 @@ function updateStats() {
     const certCountEl = document.getElementById('certCount');
     
     if (taskCountEl) {
-        const count = appData.tasks?.length || 0;
-        taskCountEl.textContent = count;
-        taskCountEl.setAttribute('data-count', count);
+        taskCountEl.textContent = appData.tasks.length || 0;
+        taskCountEl.setAttribute('data-count', appData.tasks.length || 0);
     }
     if (certCountEl) {
-        const count = appData.certificates?.length || 0;
-        certCountEl.textContent = count;
-        certCountEl.setAttribute('data-count', count);
-    }
-}
-
-function updateSyncStatus() {
-    const syncStatus = document.getElementById('syncStatus');
-    if (!syncStatus) return;
-    
-    if (FirebaseHelper.isOnline()) {
-        syncStatus.innerHTML = '<i class="fas fa-wifi"></i><span>Online</span>';
-        syncStatus.style.background = 'rgba(16, 185, 129, 0.2)';
-        syncStatus.style.color = 'var(--success)';
-    } else {
-        syncStatus.innerHTML = '<i class="fas fa-wifi-slash"></i><span>Offline</span>';
-        syncStatus.style.background = 'rgba(245, 158, 11, 0.2)';
-        syncStatus.style.color = 'var(--warning)';
+        certCountEl.textContent = appData.certificates.length || 0;
+        certCountEl.setAttribute('data-count', appData.certificates.length || 0);
     }
 }
 
 // ============================================
-// DETAIL VIEWS - MODALS
+// DETAIL VIEWS
 // ============================================
 function showTaskDetail(taskId) {
-    const task = appData.tasks?.find(t => t.id === taskId);
+    const task = appData.tasks.find(t => t.id === taskId);
     if (!task) {
         showNotification('❌ Tugas tidak ditemukan!', 'error');
         return;
@@ -808,8 +758,6 @@ function showTaskDetail(taskId) {
     const modalTitle = document.getElementById('modal-title');
     const modalBody = document.getElementById('modal-body');
     
-    if (!modal || !modalTitle || !modalBody) return;
-    
     modalTitle.textContent = task.title || 'Detail Tugas';
     
     // Build file links
@@ -817,7 +765,7 @@ function showTaskDetail(taskId) {
     if (task.pdfFile || task.pptFile) {
         fileLinksHtml = '<h4 style="margin: 1.5rem 0 0.5rem;">📁 File Tugas</h4><div class="file-links" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">';
         
-        if (task.pdfFile?.url) {
+        if (task.pdfFile && task.pdfFile.url) {
             fileLinksHtml += `
                 <a href="${task.pdfFile.url}" target="_blank" class="file-link" style="padding: 0.5rem 1rem; background: var(--primary); color: white; border-radius: var(--radius-sm); text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem;">
                     <i class="fas fa-eye"></i> Lihat PDF
@@ -827,7 +775,7 @@ function showTaskDetail(taskId) {
                 </a>
             `;
         }
-        if (task.pptFile?.url) {
+        if (task.pptFile && task.pptFile.url) {
             fileLinksHtml += `
                 <a href="${task.pptFile.url}" download class="file-link" style="padding: 0.5rem 1rem; background: var(--accent); color: white; border-radius: var(--radius-sm); text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem;">
                     <i class="fas fa-file-powerpoint"></i> Download PPT
@@ -838,7 +786,7 @@ function showTaskDetail(taskId) {
     }
     
     // Format date
-    const dateStr = task.createdAt?.toDate
+    const dateStr = task.createdAt && task.createdAt.toDate
         ? task.createdAt.toDate().toLocaleDateString('id-ID', {
             day: 'numeric', month: 'long', year: 'numeric'
         })
@@ -872,7 +820,7 @@ function showTaskDetail(taskId) {
 }
 
 function showCertificateDetail(certId) {
-    const cert = appData.certificates?.find(c => c.id === certId);
+    const cert = appData.certificates.find(c => c.id === certId);
     if (!cert) {
         showNotification('❌ Sertifikat tidak ditemukan!', 'error');
         return;
@@ -882,14 +830,12 @@ function showCertificateDetail(certId) {
     const modalTitle = document.getElementById('cert-modal-title');
     const modalBody = document.getElementById('cert-modal-body');
     
-    if (!modal || !modalTitle || !modalBody) return;
-    
     modalTitle.textContent = cert.title || 'Sertifikat';
     
     // Build preview
     let previewHtml = '';
-    if (cert.file?.url) {
-        if (cert.file.type?.startsWith('image/')) {
+    if (cert.file && cert.file.url) {
+        if (cert.file.type && cert.file.type.startsWith('image/')) {
             previewHtml = `<img src="${cert.file.url}" alt="${cert.title}" style="max-width: 100%; border-radius: var(--radius-sm); box-shadow: var(--shadow-lg);">`;
         } else {
             previewHtml = `
@@ -916,7 +862,7 @@ function showCertificateDetail(certId) {
             <p style="color: var(--text-muted);">Tahun: ${cert.year || '-'}</p>
         </div>
         <div class="certificate-actions" style="margin-top: 1.5rem; text-align: center;">
-            ${cert.file?.url ? `
+            ${cert.file && cert.file.url ? `
                 <a href="${cert.file.url}" download class="btn btn-primary">
                     <i class="fas fa-download"></i> Download Sertifikat
                 </a>
@@ -929,10 +875,11 @@ function showCertificateDetail(certId) {
 }
 
 // ============================================
-// PDF VIEWER FUNCTIONS
+// PDF VIEWER (untuk preview langsung)
 // ============================================
 async function openPdfViewer(pdfUrl, title, fileName) {
     try {
+        // Download dulu untuk preview
         const response = await fetch(pdfUrl);
         const blob = await response.blob();
         const reader = new FileReader();
@@ -946,8 +893,6 @@ async function openPdfViewer(pdfUrl, title, fileName) {
             const modalTitle = document.getElementById('pdf-viewer-title');
             const canvas = document.getElementById('pdf-canvas');
             const loading = document.getElementById('pdf-loading');
-            
-            if (!modal || !modalTitle || !canvas || !loading) return;
             
             modalTitle.textContent = title || 'Dokumen';
             modal.classList.add('active');
@@ -1082,7 +1027,7 @@ function closePdfViewer() {
 }
 
 // ============================================
-// UI COMPONENTS INITIALIZATION
+// UI COMPONENTS (sama seperti sebelumnya)
 // ============================================
 function initNavigation() {
     const hamburger = document.querySelector('.hamburger');
@@ -1110,7 +1055,6 @@ function initScrollEffects() {
     const navLinks = document.querySelectorAll('.nav-link');
     
     window.addEventListener('scroll', function() {
-        // Navbar shadow on scroll
         if (navbar) {
             if (window.scrollY > 50) {
                 navbar.style.boxShadow = '0 2px 20px rgba(0, 0, 0, 0.3)';
@@ -1119,7 +1063,6 @@ function initScrollEffects() {
             }
         }
         
-        // Active nav link based on scroll position
         let current = '';
         sections.forEach(section => {
             const sectionTop = section.offsetTop;
@@ -1264,17 +1207,26 @@ function initThemeToggle() {
     const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
     if (savedTheme === 'light') {
         body.classList.add('light-theme');
-        icon?.classList.replace('fa-sun', 'fa-moon');
+        if (icon) {
+            icon.classList.remove('fa-sun');
+            icon.classList.add('fa-moon');
+        }
     }
     
     themeToggle.addEventListener('click', function() {
         body.classList.toggle('light-theme');
         
         if (body.classList.contains('light-theme')) {
-            icon?.classList.replace('fa-sun', 'fa-moon');
+            if (icon) {
+                icon.classList.remove('fa-sun');
+                icon.classList.add('fa-moon');
+            }
             localStorage.setItem(STORAGE_KEYS.THEME, 'light');
         } else {
-            icon?.classList.replace('fa-moon', 'fa-sun');
+            if (icon) {
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+            }
             localStorage.setItem(STORAGE_KEYS.THEME, 'dark');
         }
     });
@@ -1405,9 +1357,28 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-// ============================================
-// ADMIN PANEL FUNCTIONS
-// ============================================
+function handleContactSubmit(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    const name = formData.get('name');
+    
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    
+    submitBtn.innerHTML = '<span class="loading"></span> Mengirim...';
+    submitBtn.disabled = true;
+    
+    setTimeout(() => {
+        showNotification(`✅ Terima kasih ${name}! Pesan Anda telah terkirim.`, 'success');
+        form.reset();
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    }, 2000);
+}
+
+// Admin Panel
 function initAdminPanel() {
     const adminToggle = document.getElementById('adminToggle');
     if (!adminToggle) return;
@@ -1503,7 +1474,7 @@ function initCVDownload() {
     downloadBtn.addEventListener('click', function(e) {
         e.preventDefault();
         
-        if (appData.cv?.file?.url) {
+        if (appData.cv && appData.cv.file) {
             window.open(appData.cv.file.url, '_blank');
         } else {
             showNotification('⚠️ CV belum tersedia. Silakan upload CV melalui Admin Panel.', 'error');
@@ -1511,9 +1482,7 @@ function initCVDownload() {
     });
 }
 
-// ============================================
-// MODAL HELPERS
-// ============================================
+// Modal helpers
 function closeModal() {
     const modal = document.getElementById('task-modal');
     if (modal) {
@@ -1530,24 +1499,17 @@ function closeCertificateModal() {
     }
 }
 
-// ============================================
-// GLOBAL CLICK & KEYBOARD EVENTS
-// ============================================
+// Window events
 window.addEventListener('click', function(e) {
-    const modals = [
-        'task-modal',
-        'certificate-modal', 
-        'admin-modal',
-        'pdf-viewer-modal'
-    ];
+    const taskModal = document.getElementById('task-modal');
+    const certModal = document.getElementById('certificate-modal');
+    const adminModal = document.getElementById('admin-modal');
+    const pdfModal = document.getElementById('pdf-viewer-modal');
     
-    modals.forEach(modalId => {
-        const modal = document.getElementById(modalId);
-        if (modal && e.target === modal) {
-            modal.classList.remove('active');
-            document.body.style.overflow = '';
-        }
-    });
+    if (e.target === taskModal) closeModal();
+    if (e.target === certModal) closeCertificateModal();
+    if (e.target === adminModal) closeAdminModal();
+    if (e.target === pdfModal) closePdfViewer();
 });
 
 document.addEventListener('keydown', function(e) {
@@ -1559,19 +1521,13 @@ document.addEventListener('keydown', function(e) {
     }
 });
 
-// ============================================
-// CLEANUP ON UNLOAD
-// ============================================
+// Cleanup saat unload
 window.addEventListener('beforeunload', () => {
-    // Unsubscribe all Firebase listeners
     unsubscribers.forEach(unsub => {
         if (typeof unsub === 'function') {
             unsub();
         }
     });
-    
-    // Cache data before unload
-    FirebaseService.cacheData();
 });
 
 // ============================================
