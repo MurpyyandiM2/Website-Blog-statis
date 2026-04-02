@@ -560,10 +560,21 @@ async function handleUploadCV(event) {
             return;
         }
         
-        if (file.type !== 'application/pdf') {
-            showNotification('⚠️ File harus berformat PDF!', 'error');
-            return;
-        }
+        // Validasi: terima berbagai format dokumen
+        const allowedTypes = [
+            'application/pdf',
+             'application/msword',
+             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+             'application/vnd.ms-excel',
+             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+             'application/vnd.ms-powerpoint',
+             'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+                 ];
+ 
+         if (!allowedTypes.includes(file.type)) {
+             showNotification('⚠️ Format file tidak didukung! Gunakan PDF, DOC, DOCX, XLS, XLSX, PPT, atau PPTX', 'error');
+             return;
+         }
 
         await FirebaseService.uploadCV(file);
         updateCVStatus();
