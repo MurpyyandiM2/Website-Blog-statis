@@ -3,7 +3,7 @@
  * Professional Portfolio dengan Firebase (Firestore + Storage)
  * Real-time sync, offline support, file storage
  * 
- * UPDATED: Fixed CORS & Upload Issues
+ * UPDATED: Fixed CORS & Upload Issues + 🎬 Video Support
  */
 
 // ============================================
@@ -26,6 +26,10 @@ let pageNumPending = null;
 let scale = 1.5;
 let currentPdfData = null;
 let currentPdfName = null;
+
+// 🎬 Video variables
+let currentVideoUrl = null;
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
 
 // Data cache lokal untuk UI
 let appData = {
@@ -98,7 +102,6 @@ const FirebaseService = {
                 callback(tasks);
             }, (error) => {
                 console.error('Tasks listener error:', error);
-                // Fallback ke cache lokal jika ada
                 const cached = localStorage.getItem('cached_tasks');
                 if (cached) {
                     appData.tasks = JSON.parse(cached);
@@ -159,9 +162,9 @@ const FirebaseService = {
         try {
             showNotification('📤 Mengupload tugas...', 'info');
             
-            // Upload files jika ada
             let pdfFile = null;
             let pptFile = null;
+            let videoFile = null;
             
             if (files.pdf) {
                 console.log('Uploading PDF:', files.pdf.name);
@@ -175,11 +178,21 @@ const FirebaseService = {
                 console.log('PPT uploaded:', pptFile.url);
             }
 
+            // 🎬 Upload Video
+            if (files.video) {
+                if (files.video.size > MAX_VIDEO_SIZE) throw new Error('Ukuran video melebihi batas 100MB');
+                console.log('Uploading Video:', files.video.name);
+                showNotification('📤 Mengupload video...', 'info');
+                videoFile = await FirebaseHelper.uploadFile(files.video, 'tasks/videos');
+                console.log('Video uploaded:', videoFile.url);
+            }
+
             // Save ke Firestore
             const taskRef = await db.collection(COLLECTIONS.TASKS).add({
                 ...taskData,
                 pdfFile,
                 pptFile,
+                videoFile,
                 createdAt: FirebaseHelper.timestamp(),
                 updatedAt: FirebaseHelper.timestamp()
             });
@@ -212,22 +225,22 @@ const FirebaseService = {
                 updatedAt: FirebaseHelper.timestamp()
             };
 
-            // Handle file uploads jika ada file baru
             if (files && files.pdf) {
-                // Delete old file if exists
                 const oldTask = appData.tasks.find(t => t.id === taskId);
-                if (oldTask?.pdfFile?.path) {
-                    await FirebaseHelper.deleteFile(oldTask.pdfFile.path);
-                }
+                if (oldTask?.pdfFile?.path) await FirebaseHelper.deleteFile(oldTask.pdfFile.path);
                 updateData.pdfFile = await FirebaseHelper.uploadFile(files.pdf, 'tasks/pdfs');
             }
             
             if (files && files.ppt) {
                 const oldTask = appData.tasks.find(t => t.id === taskId);
-                if (oldTask?.pptFile?.path) {
-                    await FirebaseHelper.deleteFile(oldTask.pptFile.path);
-                }
+                if (oldTask?.pptFile?.path) await FirebaseHelper.deleteFile(oldTask.pptFile.path);
                 updateData.pptFile = await FirebaseHelper.uploadFile(files.ppt, 'tasks/ppts');
+            }
+
+            if (files && files.video) {
+                const oldTask = appData.tasks.find(t => t.id === taskId);
+                if (oldTask?.videoFile?.path) await FirebaseHelper.deleteFile(oldTask.videoFile.path);
+                updateData.videoFile = await FirebaseHelper.uploadFile(files.video, 'tasks/videos');
             }
 
             await db.collection(COLLECTIONS.TASKS).doc(taskId).update(updateData);
@@ -244,10 +257,10 @@ const FirebaseService = {
         if (!confirm('Apakah Anda yakin ingin menghapus tugas ini?')) return false;
         
         try {
-            // Delete associated files first
             const task = appData.tasks.find(t => t.id === taskId);
             if (task?.pdfFile?.path) await FirebaseHelper.deleteFile(task.pdfFile.path);
             if (task?.pptFile?.path) await FirebaseHelper.deleteFile(task.pptFile.path);
+            if (task?.videoFile?.path) await FirebaseHelper.deleteFile(task.videoFile.path);
             
             await db.collection(COLLECTIONS.TASKS).doc(taskId).delete();
             showNotification('✅ Tugas berhasil dihapus!', 'success');
@@ -309,7 +322,6 @@ const FirebaseService = {
         try {
             showNotification('📤 Mengupload CV...', 'info');
             
-            // Delete old CV if exists
             const oldCV = appData.cv;
             if (oldCV?.file?.path) {
                 await FirebaseHelper.deleteFile(oldCV.file.path);
@@ -402,14 +414,12 @@ document.addEventListener('DOMContentLoaded', async function() {
 });
 
 function setupRealtimeListeners() {
-    // Tasks listener
     FirebaseService.subscribeTasks((tasks) => {
         renderTasks(tasks);
         updateStats();
         FirebaseService.cacheData();
     });
 
-    // Certificates listener
     FirebaseService.subscribeCertificates((certs) => {
         renderCertificates(certs);
         updateStats();
@@ -493,12 +503,12 @@ async function handleAddTask(event) {
 
         const files = {
             pdf: document.getElementById('taskPdfFile').files[0] || null,
-            ppt: document.getElementById('taskPptFile').files[0] || null
+            ppt: document.getElementById('taskPptFile').files[0] || null,
+            video: document.getElementById('taskVideoFile')?.files[0] || null // 🎬 Video
         };
 
         await FirebaseService.addTask(taskData, files);
         
-        // Reset form
         document.getElementById('addTaskForm').reset();
         loadAdminTasksList();
         
@@ -528,10 +538,8 @@ async function handleAddCertificate(event) {
         };
 
         const file = document.getElementById('certFile').files[0] || null;
-
         await FirebaseService.addCertificate(certData, file);
         
-        // Reset form
         document.getElementById('addCertificateForm').reset();
         loadAdminCertsList();
         
@@ -560,21 +568,20 @@ async function handleUploadCV(event) {
             return;
         }
         
-        // Validasi: terima berbagai format dokumen
         const allowedTypes = [
             'application/pdf',
-             'application/msword',
-             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-             'application/vnd.ms-excel',
-             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-             'application/vnd.ms-powerpoint',
-             'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-                 ];
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-powerpoint',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+        ];
  
-         if (!allowedTypes.includes(file.type)) {
-             showNotification('⚠️ Format file tidak didukung! Gunakan PDF, DOC, DOCX, XLS, XLSX, PPT, atau PPTX', 'error');
-             return;
-         }
+        if (!allowedTypes.includes(file.type)) {
+            showNotification('⚠️ Format file tidak didukung! Gunakan PDF, DOC, DOCX, XLS, XLSX, PPT, atau PPTX', 'error');
+            return;
+        }
 
         await FirebaseService.uploadCV(file);
         updateCVStatus();
@@ -594,9 +601,7 @@ async function handleUploadCV(event) {
 async function deleteTask(taskId) {
     try {
         const success = await FirebaseService.deleteTask(taskId);
-        if (success) {
-            loadAdminTasksList();
-        }
+        if (success) loadAdminTasksList();
     } catch (error) {
         console.error('❌ deleteTask error:', error);
     }
@@ -605,9 +610,7 @@ async function deleteTask(taskId) {
 async function deleteCertificate(certId) {
     try {
         const success = await FirebaseService.deleteCertificate(certId);
-        if (success) {
-            loadAdminCertsList();
-        }
+        if (success) loadAdminCertsList();
     } catch (error) {
         console.error('❌ deleteCertificate error:', error);
     }
@@ -630,7 +633,6 @@ function createTaskCard(task) {
         'pending': 'fa-hourglass-start'
     }[statusClass] || 'fa-hourglass-start';
     
-    // Format tanggal dari Firestore timestamp
     let dateStr = task.date;
     if (task.createdAt && task.createdAt.toDate) {
         dateStr = task.createdAt.toDate().toLocaleDateString('id-ID', {
@@ -646,6 +648,14 @@ function createTaskCard(task) {
             </div>
             <h3 class="task-title">${task.title || 'Untitled'}</h3>
             <p class="task-description">${task.description || ''}</p>
+            
+            <!-- 🎬 Attachment Badges -->
+            <div class="task-attachments" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                ${task.pdfFile ? '<span class="attachment-badge pdf"><i class="fas fa-file-pdf"></i> PDF</span>' : ''}
+                ${task.pptFile ? '<span class="attachment-badge ppt"><i class="fas fa-file-powerpoint"></i> PPT</span>' : ''}
+                ${task.videoFile ? '<span class="attachment-badge video"><i class="fas fa-video"></i> Video</span>' : ''}
+            </div>
+
             <div class="task-footer">
                 <span class="task-status ${statusClass}">
                     <i class="fas ${statusIcon}"></i> ${statusText}
@@ -771,9 +781,8 @@ function showTaskDetail(taskId) {
     
     modalTitle.textContent = task.title || 'Detail Tugas';
     
-    // Build file links
     let fileLinksHtml = '';
-    if (task.pdfFile || task.pptFile) {
+    if (task.pdfFile || task.pptFile || task.videoFile) {
         fileLinksHtml = '<h4 style="margin: 1.5rem 0 0.5rem;">📁 File Tugas</h4><div class="file-links" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">';
         
         if (task.pdfFile && task.pdfFile.url) {
@@ -793,10 +802,21 @@ function showTaskDetail(taskId) {
                 </a>
             `;
         }
+        // 🎬 Video Links
+        if (task.videoFile && task.videoFile.url) {
+            fileLinksHtml += `
+                <button onclick="openVideoPlayer('${task.videoFile.url}', '${task.videoFile.name || 'video.mp4}', '${task.title}')" 
+                        class="file-link previewable" style="padding: 0.5rem 1rem; background: linear-gradient(135deg, #8B5CF6, #6D28D9); color: white; border-radius: var(--radius-sm); border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 0.25rem;">
+                    <i class="fas fa-play"></i> Putar Video
+                </button>
+                <a href="${task.videoFile.url}" download class="file-link" style="padding: 0.5rem 1rem; background: var(--bg-secondary); color: var(--text-primary); border-radius: var(--radius-sm); text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem;">
+                    <i class="fas fa-download"></i> Download Video
+                </a>
+            `;
+        }
         fileLinksHtml += '</div>';
     }
     
-    // Format date
     const dateStr = task.createdAt && task.createdAt.toDate
         ? task.createdAt.toDate().toLocaleDateString('id-ID', {
             day: 'numeric', month: 'long', year: 'numeric'
@@ -843,7 +863,6 @@ function showCertificateDetail(certId) {
     
     modalTitle.textContent = cert.title || 'Sertifikat';
     
-    // Build preview
     let previewHtml = '';
     if (cert.file && cert.file.url) {
         if (cert.file.type && cert.file.type.startsWith('image/')) {
@@ -886,11 +905,10 @@ function showCertificateDetail(certId) {
 }
 
 // ============================================
-// PDF VIEWER (untuk preview langsung)
+// PDF VIEWER
 // ============================================
 async function openPdfViewer(pdfUrl, title, fileName) {
     try {
-        // Download dulu untuk preview
         const response = await fetch(pdfUrl);
         const blob = await response.blob();
         const reader = new FileReader();
@@ -912,14 +930,7 @@ async function openPdfViewer(pdfUrl, title, fileName) {
             canvas.style.display = 'none';
             loading.style.display = 'flex';
             
-            // Parse base64 data
-            let base64Data;
-            if (pdfData.includes(',')) {
-                base64Data = pdfData.split(',')[1];
-            } else {
-                base64Data = pdfData;
-            }
-            
+            let base64Data = pdfData.includes(',') ? pdfData.split(',')[1] : pdfData;
             const raw = window.atob(base64Data);
             const uint8Array = new Uint8Array(raw.length);
             for (let i = 0; i < raw.length; i++) {
@@ -940,7 +951,6 @@ async function openPdfViewer(pdfUrl, title, fileName) {
         };
         
         reader.readAsDataURL(blob);
-        
     } catch (error) {
         console.error('❌ Error loading PDF:', error);
         showNotification('❌ Gagal memuat PDF. Silakan download file.', 'error');
@@ -949,7 +959,6 @@ async function openPdfViewer(pdfUrl, title, fileName) {
 
 function renderPage(num) {
     if (!pdfDoc) return;
-    
     pageRendering = true;
     
     pdfDoc.getPage(num).then(page => {
@@ -960,11 +969,7 @@ function renderPage(num) {
         canvas.height = viewport.height;
         canvas.width = viewport.width;
         
-        const renderContext = {
-            canvasContext: ctx,
-            viewport: viewport
-        };
-        
+        const renderContext = { canvasContext: ctx, viewport: viewport };
         const renderTask = page.render(renderContext);
         
         renderTask.promise.then(() => {
@@ -975,7 +980,6 @@ function renderPage(num) {
             }
         });
     });
-    
     updatePageInfo();
 }
 
@@ -1014,16 +1018,12 @@ function zoomOut() {
 
 function updatePageInfo() {
     const pageInfo = document.getElementById('page-info');
-    if (pageInfo && pdfDoc) {
-        pageInfo.textContent = `Halaman ${pageNum} dari ${pdfDoc.numPages}`;
-    }
+    if (pageInfo && pdfDoc) pageInfo.textContent = `Halaman ${pageNum} dari ${pdfDoc.numPages}`;
 }
 
 function updateZoomLevel() {
     const zoomLevel = document.getElementById('zoom-level');
-    if (zoomLevel) {
-        zoomLevel.textContent = `${Math.round(scale * 100)}%`;
-    }
+    if (zoomLevel) zoomLevel.textContent = `${Math.round(scale * 100)}%`;
 }
 
 function closePdfViewer() {
@@ -1038,7 +1038,89 @@ function closePdfViewer() {
 }
 
 // ============================================
-// UI COMPONENTS (sama seperti sebelumnya)
+// 🎬 VIDEO PLAYER FUNCTIONS
+// ============================================
+function openVideoPlayer(videoUrl, fileName, title) {
+    const modal = document.getElementById('video-modal');
+    const videoPlayer = document.getElementById('video-player');
+    const videoLoading = document.getElementById('video-loading');
+    const videoInfo = document.getElementById('video-info');
+    const downloadLink = document.getElementById('video-download-link');
+    
+    if (!modal || !videoPlayer) {
+        showNotification('❌ Video player tidak ditemukan!', 'error');
+        return;
+    }
+    
+    document.getElementById('video-modal-title').textContent = title || 'Video';
+    downloadLink.href = videoUrl;
+    downloadLink.download = fileName || 'video.mp4';
+    
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    
+    videoLoading.style.display = 'flex';
+    videoPlayer.style.display = 'none';
+    videoPlayer.pause();
+    videoPlayer.src = '';
+    
+    currentVideoUrl = videoUrl;
+    videoPlayer.src = videoUrl;
+    
+    videoPlayer.onloadeddata = function() {
+        videoLoading.style.display = 'none';
+        videoPlayer.style.display = 'block';
+        videoPlayer.play().catch(e => console.log('Auto-play prevented:', e));
+        
+        if (videoInfo) {
+            videoInfo.innerHTML = `
+                <strong>${fileName}</strong><br>
+                Durasi: ${formatVideoDuration(videoPlayer.duration)} | 
+                <a href="${videoUrl}" target="_blank" style="color: var(--primary);">Buka di tab baru</a>
+            `;
+        }
+    };
+    
+    videoPlayer.onerror = function(e) {
+        console.error('Video load error:', e);
+        videoLoading.innerHTML = `
+            <i class="fas fa-exclamation-triangle" style="color: var(--warning); font-size: 2rem;"></i>
+            <p>Gagal memuat video. Silakan <a href="${videoUrl}" target="_blank" style="color: var(--primary);">download</a> untuk memutar.</p>
+        `;
+    };
+}
+
+function closeVideoModal() {
+    const modal = document.getElementById('video-modal');
+    const videoPlayer = document.getElementById('video-player');
+    
+    if (modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+    
+    if (videoPlayer) {
+        videoPlayer.pause();
+        videoPlayer.src = ''; // Free memory
+    }
+    
+    currentVideoUrl = null;
+}
+
+function formatVideoDuration(seconds) {
+    if (!seconds || isNaN(seconds)) return '00:00';
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hrs > 0) {
+        return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+// ============================================
+// UI COMPONENTS
 // ============================================
 function initNavigation() {
     const hamburger = document.querySelector('.hamburger');
@@ -1077,16 +1159,12 @@ function initScrollEffects() {
         let current = '';
         sections.forEach(section => {
             const sectionTop = section.offsetTop;
-            if (window.scrollY >= sectionTop - 200) {
-                current = section.getAttribute('id');
-            }
+            if (window.scrollY >= sectionTop - 200) current = section.getAttribute('id');
         });
         
         navLinks.forEach(link => {
             link.classList.remove('active');
-            if (link.getAttribute('href') === '#' + current) {
-                link.classList.add('active');
-            }
+            if (link.getAttribute('href') === '#' + current) link.classList.add('active');
         });
     });
 }
@@ -1105,13 +1183,11 @@ function initTypingEffect() {
             setTimeout(type, 100);
         }
     }
-    
     setTimeout(type, 500);
 }
 
 function initSkillBars() {
     const skillBars = document.querySelectorAll('.skill-progress');
-    
     const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
@@ -1120,21 +1196,18 @@ function initSkillBars() {
             }
         });
     }, { threshold: 0.5 });
-    
     skillBars.forEach(bar => observer.observe(bar));
 }
 
 function initParticleBackground() {
     const canvas = document.getElementById('particles-canvas');
     if (!canvas) return;
-    
     const ctx = canvas.getContext('2d');
     
     function resizeCanvas() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
     }
-    
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
     
@@ -1147,17 +1220,14 @@ function initParticleBackground() {
             this.speedY = Math.random() * 0.5 - 0.25;
             this.opacity = Math.random() * 0.5 + 0.2;
         }
-        
         update() {
             this.x += this.speedX;
             this.y += this.speedY;
-            
             if (this.x > canvas.width) this.x = 0;
             if (this.x < 0) this.x = canvas.width;
             if (this.y > canvas.height) this.y = 0;
             if (this.y < 0) this.y = canvas.height;
         }
-        
         draw() {
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
@@ -1168,10 +1238,7 @@ function initParticleBackground() {
     
     const particles = [];
     const particleCount = Math.min(50, Math.floor((canvas.width * canvas.height) / 20000));
-    
-    for (let i = 0; i < particleCount; i++) {
-        particles.push(new Particle());
-    }
+    for (let i = 0; i < particleCount; i++) particles.push(new Particle());
     
     function drawConnections() {
         for (let i = 0; i < particles.length; i++) {
@@ -1179,7 +1246,6 @@ function initParticleBackground() {
                 const dx = particles[i].x - particles[j].x;
                 const dy = particles[i].y - particles[j].y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
-                
                 if (distance < 150) {
                     ctx.beginPath();
                     ctx.strokeStyle = `rgba(79, 70, 229, ${0.1 * (1 - distance / 150)})`;
@@ -1194,50 +1260,32 @@ function initParticleBackground() {
     
     function animate() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        particles.forEach(particle => {
-            particle.update();
-            particle.draw();
-        });
-        
+        particles.forEach(p => { p.update(); p.draw(); });
         drawConnections();
         requestAnimationFrame(animate);
     }
-    
     animate();
 }
 
 function initThemeToggle() {
     const themeToggle = document.getElementById('themeToggle');
     if (!themeToggle) return;
-    
     const icon = themeToggle.querySelector('i');
     const body = document.body;
     
-    // Load saved theme
     const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
     if (savedTheme === 'light') {
         body.classList.add('light-theme');
-        if (icon) {
-            icon.classList.remove('fa-sun');
-            icon.classList.add('fa-moon');
-        }
+        if (icon) { icon.classList.remove('fa-sun'); icon.classList.add('fa-moon'); }
     }
     
     themeToggle.addEventListener('click', function() {
         body.classList.toggle('light-theme');
-        
         if (body.classList.contains('light-theme')) {
-            if (icon) {
-                icon.classList.remove('fa-sun');
-                icon.classList.add('fa-moon');
-            }
+            if (icon) { icon.classList.remove('fa-sun'); icon.classList.add('fa-moon'); }
             localStorage.setItem(STORAGE_KEYS.THEME, 'light');
         } else {
-            if (icon) {
-                icon.classList.remove('fa-moon');
-                icon.classList.add('fa-sun');
-            }
+            if (icon) { icon.classList.remove('fa-moon'); icon.classList.add('fa-sun'); }
             localStorage.setItem(STORAGE_KEYS.THEME, 'dark');
         }
     });
@@ -1248,21 +1296,14 @@ function initBackToTop() {
     if (!backToTop) return;
     
     window.addEventListener('scroll', function() {
-        if (window.scrollY > 500) {
-            backToTop.classList.add('visible');
-        } else {
-            backToTop.classList.remove('visible');
-        }
+        if (window.scrollY > 500) backToTop.classList.add('visible');
+        else backToTop.classList.remove('visible');
     });
-    
-    backToTop.addEventListener('click', function() {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
+    backToTop.addEventListener('click', function() { window.scrollTo({ top: 0, behavior: 'smooth' }); });
 }
 
 function initCounterAnimation() {
     const counters = document.querySelectorAll('.stat-number');
-    
     const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
@@ -1272,7 +1313,6 @@ function initCounterAnimation() {
             }
         });
     }, { threshold: 0.5 });
-    
     counters.forEach(counter => observer.observe(counter));
 }
 
@@ -1292,21 +1332,17 @@ function animateCounter(element, target) {
 
 function initTaskFilter() {
     const filterBtns = document.querySelectorAll('.tasks-filter .filter-btn');
-    
     filterBtns.forEach(btn => {
         btn.addEventListener('click', function() {
             filterBtns.forEach(b => b.classList.remove('active'));
             this.classList.add('active');
-            
-            const filter = this.getAttribute('data-filter');
-            filterTasks(filter);
+            filterTasks(this.getAttribute('data-filter'));
         });
     });
 }
 
 function filterTasks(filter) {
     const taskCards = document.querySelectorAll('.task-card');
-    
     taskCards.forEach(card => {
         const category = card.getAttribute('data-category');
         if (filter === 'all' || category === filter) {
@@ -1323,7 +1359,6 @@ function initSmoothScroll() {
         anchor.addEventListener('click', function(e) {
             e.preventDefault();
             const target = document.querySelector(this.getAttribute('href'));
-            
             if (target) {
                 const offsetTop = target.offsetTop - 80;
                 window.scrollTo({ top: offsetTop, behavior: 'smooth' });
@@ -1346,35 +1381,21 @@ function showNotification(message, type = 'info') {
     
     if (icon) {
         icon.className = '';
-        if (type === 'success') {
-            icon.className = 'fas fa-check-circle';
-            notification.style.borderLeftColor = 'var(--success)';
-        } else if (type === 'error') {
-            icon.className = 'fas fa-exclamation-circle';
-            notification.style.borderLeftColor = 'var(--error)';
-        } else if (type === 'warning') {
-            icon.className = 'fas fa-exclamation-triangle';
-            notification.style.borderLeftColor = 'var(--warning)';
-        } else {
-            icon.className = 'fas fa-info-circle';
-            notification.style.borderLeftColor = 'var(--primary)';
-        }
+        if (type === 'success') { icon.className = 'fas fa-check-circle'; notification.style.borderLeftColor = 'var(--success)'; } 
+        else if (type === 'error') { icon.className = 'fas fa-exclamation-circle'; notification.style.borderLeftColor = 'var(--error)'; } 
+        else if (type === 'warning') { icon.className = 'fas fa-exclamation-triangle'; notification.style.borderLeftColor = 'var(--warning)'; } 
+        else { icon.className = 'fas fa-info-circle'; notification.style.borderLeftColor = 'var(--primary)'; }
     }
     
     notification.classList.add('show');
-    
-    setTimeout(() => {
-        notification.classList.remove('show');
-    }, 3000);
+    setTimeout(() => notification.classList.remove('show'), 3000);
 }
 
 function handleContactSubmit(event) {
     event.preventDefault();
-    
     const form = event.target;
     const formData = new FormData(form);
     const name = formData.get('name');
-    
     const submitBtn = form.querySelector('button[type="submit"]');
     const originalText = submitBtn.innerHTML;
     
@@ -1393,24 +1414,15 @@ function handleContactSubmit(event) {
 function initAdminPanel() {
     const adminToggle = document.getElementById('adminToggle');
     if (!adminToggle) return;
-    
-    adminToggle.addEventListener('click', function() {
-        openAdminModal();
-    });
-    
-    // Check if already logged in
-    if (localStorage.getItem(STORAGE_KEYS.ADMIN_SESSION) === 'true') {
-        showAdminDashboard();
-    }
+    adminToggle.addEventListener('click', openAdminModal);
+    if (localStorage.getItem(STORAGE_KEYS.ADMIN_SESSION) === 'true') showAdminDashboard();
 }
 
 function openAdminModal() {
     const modal = document.getElementById('admin-modal');
     if (!modal) return;
-    
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
-    
     loadAdminTasksList();
     loadAdminCertsList();
     updateCVStatus();
@@ -1418,15 +1430,11 @@ function openAdminModal() {
 
 function closeAdminModal() {
     const modal = document.getElementById('admin-modal');
-    if (!modal) return;
-    
-    modal.classList.remove('active');
-    document.body.style.overflow = '';
+    if (modal) { modal.classList.remove('active'); document.body.style.overflow = ''; }
 }
 
 function loginAdmin() {
     const password = document.getElementById('adminPassword')?.value;
-    
     if (password === ADMIN_PASSWORD) {
         localStorage.setItem(STORAGE_KEYS.ADMIN_SESSION, 'true');
         showNotification('✅ Login berhasil!', 'success');
@@ -1438,76 +1446,52 @@ function loginAdmin() {
 
 function logoutAdmin() {
     localStorage.removeItem(STORAGE_KEYS.ADMIN_SESSION);
-    
     const loginSection = document.getElementById('admin-login');
     const dashboardSection = document.getElementById('admin-dashboard');
     const passwordInput = document.getElementById('adminPassword');
-    
     if (loginSection) loginSection.style.display = 'block';
     if (dashboardSection) dashboardSection.style.display = 'none';
     if (passwordInput) passwordInput.value = '';
-    
     showNotification('✅ Logout berhasil!', 'success');
 }
 
 function showAdminDashboard() {
     const loginSection = document.getElementById('admin-login');
     const dashboardSection = document.getElementById('admin-dashboard');
-    
     if (loginSection) loginSection.style.display = 'none';
     if (dashboardSection) dashboardSection.style.display = 'block';
-    
     loadAdminTasksList();
     loadAdminCertsList();
     updateCVStatus();
 }
 
 function switchAdminTab(tab) {
-    // Update active tab button
     document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
     event?.target?.classList?.add('active');
-    
-    // Show selected tab content
-    document.querySelectorAll('.admin-tab-content').forEach(c => {
-        c.style.display = 'none';
-    });
-    
+    document.querySelectorAll('.admin-tab-content').forEach(c => c.style.display = 'none');
     const tabContent = document.getElementById('admin-' + tab);
-    if (tabContent) {
-        tabContent.style.display = 'block';
-    }
+    if (tabContent) tabContent.style.display = 'block';
 }
 
 function initCVDownload() {
     const downloadBtn = document.getElementById('downloadCVBtn');
     if (!downloadBtn) return;
-    
     downloadBtn.addEventListener('click', function(e) {
         e.preventDefault();
-        
-        if (appData.cv && appData.cv.file) {
-            window.open(appData.cv.file.url, '_blank');
-        } else {
-            showNotification('⚠️ CV belum tersedia. Silakan upload CV melalui Admin Panel.', 'error');
-        }
+        if (appData.cv && appData.cv.file) window.open(appData.cv.file.url, '_blank');
+        else showNotification('⚠️ CV belum tersedia. Silakan upload CV melalui Admin Panel.', 'error');
     });
 }
 
 // Modal helpers
 function closeModal() {
     const modal = document.getElementById('task-modal');
-    if (modal) {
-        modal.classList.remove('active');
-        document.body.style.overflow = '';
-    }
+    if (modal) { modal.classList.remove('active'); document.body.style.overflow = ''; }
 }
 
 function closeCertificateModal() {
     const modal = document.getElementById('certificate-modal');
-    if (modal) {
-        modal.classList.remove('active');
-        document.body.style.overflow = '';
-    }
+    if (modal) { modal.classList.remove('active'); document.body.style.overflow = ''; }
 }
 
 // Window events
@@ -1516,11 +1500,13 @@ window.addEventListener('click', function(e) {
     const certModal = document.getElementById('certificate-modal');
     const adminModal = document.getElementById('admin-modal');
     const pdfModal = document.getElementById('pdf-viewer-modal');
+    const videoModal = document.getElementById('video-modal');
     
     if (e.target === taskModal) closeModal();
     if (e.target === certModal) closeCertificateModal();
     if (e.target === adminModal) closeAdminModal();
     if (e.target === pdfModal) closePdfViewer();
+    if (e.target === videoModal) closeVideoModal(); // 🎬
 });
 
 document.addEventListener('keydown', function(e) {
@@ -1529,22 +1515,18 @@ document.addEventListener('keydown', function(e) {
         closeCertificateModal();
         closeAdminModal();
         closePdfViewer();
+        closeVideoModal(); // 🎬
     }
 });
 
 // Cleanup saat unload
 window.addEventListener('beforeunload', () => {
-    unsubscribers.forEach(unsub => {
-        if (typeof unsub === 'function') {
-            unsub();
-        }
-    });
+    unsubscribers.forEach(unsub => { if (typeof unsub === 'function') unsub(); });
 });
 
 // ============================================
-// GLOBAL FUNCTIONS EXPORT (untuk onclick handlers di HTML)
+// GLOBAL FUNCTIONS EXPORT
 // ============================================
-// Functions yang dipanggil dari HTML onclick attributes
 window.showTaskDetail = showTaskDetail;
 window.showCertificateDetail = showCertificateDetail;
 window.openPdfViewer = openPdfViewer;
@@ -1573,3 +1555,7 @@ window.handleUploadCV = handleUploadCV;
 window.handleContactSubmit = handleContactSubmit;
 window.deleteTask = deleteTask;
 window.deleteCertificate = deleteCertificate;
+
+// 🎬 Video exports
+window.openVideoPlayer = openVideoPlayer;
+window.closeVideoModal = closeVideoModal;
