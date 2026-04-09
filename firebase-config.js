@@ -9,13 +9,13 @@
 // 1. FIREBASE PROJECT CONFIG
 // ============================================
 const firebaseConfig = {
-    apiKey: "GANTI_DENGAN_API_KEY_ANDA",
-    authDomain: "GANTI_PROJECT_ID.firebaseapp.com",
-    projectId: "GANTI_PROJECT_ID_ANDA",
-    storageBucket: "GANTI_PROJECT_ID.appspot.com",
-    messagingSenderId: "GANTI_SENDER_ID",
-    appId: "GANTI_APP_ID",
-    measurementId: "G_MEASUREMENT_ID" // Opsional
+  apiKey: "AIzaSyDZkXgWnKmYw-CIhtaxNA_blTNOyrcFlE4",
+  authDomain: "website-blog-statis.firebaseapp.com",
+  projectId: "website-blog-statis",
+  storageBucket: "website-blog-statis.firebasestorage.app",
+  messagingSenderId: "534397798684",
+  appId: "1:534397798684:web:69be7a86aa3f03f8d952d9",
+  measurementId: "G-HKLPJYP2GB"
 };
 
 // ============================================
