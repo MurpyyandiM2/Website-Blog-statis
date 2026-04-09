@@ -1,205 +1,121 @@
 /**
- * FIREBASE CONFIGURATION - COMPAT MODE (v10.7.1)
+ * FIREBASE CONFIGURATION & HELPER
+ * Compatible with Firebase SDK v10.7.1 (Compat Mode)
  * 
- * LANGKAH SETUP:
- * 1. Buka Firebase Console: https://console.firebase.google.com/
- * 2. Pilih project "website-blog-statis"
- * 3. Klik ⚙️ Settings > Project settings > General
- * 4. Scroll ke "Your apps" > Klik ikon Web </>
- * 5. Copy config dan paste di bawah ini
+ * PENTING: GANTI firebaseConfig dengan kredensial dari Firebase Console Anda!
  */
 
-// ⚠️ KONFIGURASI FIREBASE - GANTI DENGAN NILAI ASLI ANDA
+// ============================================
+// 1. FIREBASE PROJECT CONFIG
+// ============================================
 const firebaseConfig = {
-    apiKey: "AIzaSyDZkXgWnKmYw-CIhtaxNA_blTNOyrcFlE4",
-    authDomain: "website-blog-statis.firebaseapp.com",
-    projectId: "website-blog-statis",
-    storageBucket: "website-blog-statis.firebasestorage.app",
-    messagingSenderId: "534397798684",
-    appId: "1:534397798684:web:69be7a86aa3f03f8d952d9",
-    measurementId: "G-HKLPJYP2GB"
+    apiKey: "GANTI_DENGAN_API_KEY_ANDA",
+    authDomain: "GANTI_PROJECT_ID.firebaseapp.com",
+    projectId: "GANTI_PROJECT_ID_ANDA",
+    storageBucket: "GANTI_PROJECT_ID.appspot.com",
+    messagingSenderId: "GANTI_SENDER_ID",
+    appId: "GANTI_APP_ID",
+    measurementId: "G_MEASUREMENT_ID" // Opsional
 };
 
 // ============================================
-// INITIALIZE FIREBASE
+// 2. INITIALIZE FIREBASE (COMPAT MODE)
 // ============================================
-let db, storage, auth, app;
-
-try {
-    // Cek apakah Firebase sudah di-inisialisasi
-    if (!firebase.apps.length) {
-        app = firebase.initializeApp(firebaseConfig);
-        console.log('✅ Firebase initialized successfully');
-    } else {
-        app = firebase.app();
-        console.log('✅ Using existing Firebase app');
-    }
-    
-    // Inisialisasi services
-    db = firebase.firestore();
-    storage = firebase.storage();
-    auth = firebase.auth();
-    
-    // Konfigurasi Firestore
-    db.settings({
-        ignoreUndefinedProperties: true,
-        timestampBehavior: 'estimate'
-    });
-    
-    console.log('✅ Firebase services ready:');
-    console.log('   - Firestore: Ready');
-    console.log('   - Storage: Ready');
-    console.log('   - Auth: Ready');
-    
-} catch (error) {
-    console.error('❌ Firebase initialization failed:', error);
-    
-    // Tampilkan error yang lebih detail
-    if (error.code === 'auth/invalid-api-key') {
-        console.error('⚠️ API Key tidak valid. Periksa firebase-config.js');
-    } else if (error.code === 'auth/project-not-found') {
-        console.error('⚠️ Project tidak ditemukan. Periksa projectId');
-    }
-}
+firebase.initializeApp(firebaseConfig);
 
 // ============================================
-// COLLECTION NAMES (KONSTANTA)
+// 3. GLOBAL INSTANCES (DIANGKAT OLEH script.js)
+// ============================================
+const db = firebase.firestore();
+const storage = firebase.storage();
+const auth = firebase.auth();
+
+// ============================================
+// 4. COLLECTION CONSTANTS
 // ============================================
 const COLLECTIONS = {
     TASKS: 'tasks',
     CERTIFICATES: 'certificates',
-    CV: 'cv',
-    SETTINGS: 'settings',
-    CONTACTS: 'contacts'
+    CV: 'cv'
 };
 
 // ============================================
-// FIREBASE HELPER FUNCTIONS
+// 5. FIREBASE HELPER UTILITIES
 // ============================================
 const FirebaseHelper = {
-    // Cek koneksi internet
-    isOnline: () => navigator.onLine,
-    
-    // Enable offline persistence
+    // Enable offline persistence (sync antar tab)
     enableOffline: async () => {
         try {
             await db.enablePersistence({ synchronizeTabs: true });
-            console.log('📦 Offline persistence enabled');
+            console.log('✅ Firestore offline persistence enabled');
             return true;
         } catch (err) {
             if (err.code === 'failed-precondition') {
-                console.warn('⚠️ Multiple tabs open - persistence only in first tab');
+                console.warn('⚠️ Persistence only works in one tab at a time.');
             } else if (err.code === 'unimplemented') {
-                console.warn('⚠️ Browser tidak support offline persistence');
-            } else {
-                console.error('❌ Persistence error:', err);
+                console.warn('⚠️ Browser does not support offline persistence.');
             }
             return false;
         }
     },
 
-    // Helper untuk server timestamp
+    // Server timestamp helper
     timestamp: () => firebase.firestore.FieldValue.serverTimestamp(),
 
-    // Helper untuk increment/decrement
-    increment: (value) => firebase.firestore.FieldValue.increment(value),
+    // Check connection status
+    isOnline: () => navigator.onLine,
 
-    // Upload file ke Firebase Storage
-    uploadFile: async (file, folder = 'uploads') => {
-        if (!file) {
-            throw new Error('No file provided');
-        }
-        
-        // Validasi ukuran file (max 10MB)
-        const maxSize = 10 * 1024 * 1024; // 10MB
-        if (file.size > maxSize) {
-            throw new Error(`File terlalu besar. Maksimal ${maxSize / 1024 / 1024}MB`);
-        }
-        
-        // Generate unique filename
-        const timestamp = Date.now();
-        const sanitizedName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-        const filePath = `${folder}/${timestamp}_${sanitizedName}`;
-        
-        const storageRef = storage.ref(filePath);
-        
-        // Upload dengan metadata
+    // Universal file upload handler (PDF, PPT, VIDEO, IMG, DLL)
+    uploadFile: async (file, folder) => {
+        if (!file) return null;
+
+        // Generate unique filename agar tidak tertimpa
+        const ext = file.name.split('.').pop();
+        const uniqueName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${ext}`;
+        const storageRef = storage.ref(`${folder}/${uniqueName}`);
+
+        // Metadata untuk tracking
         const metadata = {
             contentType: file.type,
             customMetadata: {
-                uploadedAt: new Date().toISOString(),
                 originalName: file.name,
-                uploadedBy: 'portfolio-app'
+                uploadedAt: new Date().toISOString()
             }
         };
-        
-        const snapshot = await storageRef.put(file, metadata);
-        const downloadURL = await snapshot.ref.getDownloadURL();
-        
+
+        // Upload file
+        await storageRef.put(file, metadata);
+        const downloadURL = await storageRef.getDownloadURL();
+
         return {
-            name: file.name,
             url: downloadURL,
-            path: snapshot.ref.fullPath,
-            size: file.size,
+            path: storageRef.fullPath,
+            name: file.name,
             type: file.type,
-            uploadedAt: new Date().toISOString()
+            size: file.size
         };
     },
 
-    // Delete file dari Storage
+    // Delete file dari Firebase Storage
     deleteFile: async (filePath) => {
-        if (!filePath) return true;
-        
+        if (!filePath) return;
         try {
-            const fileRef = storage.ref(filePath);
-            await fileRef.delete();
-            console.log('🗑️ File deleted:', filePath);
-            return true;
+            await storage.ref(filePath).delete();
+            console.log(`✅ Deleted storage file: ${filePath}`);
         } catch (error) {
-            // Ignore jika file tidak ditemukan (sudah terhapus)
-            if (error.code === 'storage/object-not-found') {
-                console.log('ℹ️ File already deleted:', filePath);
-                return true;
+            // Abaikan error "file not found" saat cleanup
+            if (error.code !== 'storage/object-not-found') {
+                console.error(`❌ Gagal menghapus ${filePath}:`, error.message);
             }
-            console.error('❌ Delete file error:', error);
-            throw error;
         }
-    },
-
-    // Format timestamp dari Firestore ke tanggal Indonesia
-    formatDate: (timestamp) => {
-        if (!timestamp) return '-';
-        
-        if (timestamp.toDate) {
-            return timestamp.toDate().toLocaleDateString('id-ID', {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric'
-            });
-        }
-        
-        return timestamp;
-    },
-
-    // Format datetime lengkap
-    formatDateTime: (timestamp) => {
-        if (!timestamp) return '-';
-        
-        if (timestamp.toDate) {
-            return timestamp.toDate().toLocaleString('id-ID', {
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-        }
-        
-        return timestamp;
     }
 };
 
-// Export untuk debugging
-console.log('🔧 FirebaseHelper loaded');
-console.log('📚 Collections:', COLLECTIONS);
-console.log('🌐 Online status:', FirebaseHelper.isOnline());
+// ============================================
+// 6. EXPORT KE WINDOW (GLOBAL SCOPE)
+// ============================================
+window.FirebaseHelper = FirebaseHelper;
+window.COLLECTIONS = COLLECTIONS;
+window.db = db;
+window.storage = storage;
+window.auth = auth;
